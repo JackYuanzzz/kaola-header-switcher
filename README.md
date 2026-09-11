@@ -10,6 +10,7 @@
 <p align="center">
   <a href="https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest"><strong>下载已打包的插件</strong></a>
   · <a href="#安装">安装</a>
+  · <a href="#agent-install">Agent / AI 安装</a>
   · <a href="#使用">使用</a>
   · <a href="#常见问题">常见问题</a>
   · <a href="#开发">开发</a>
@@ -34,6 +35,79 @@
 5. 打开工具栏的扩展菜单，将「有问题找kaola」固定到工具栏。
 
 安装包已经包含运行所需文件。Edge 等 Chromium 浏览器可尝试同样的加载方式；本项目的自动化验收使用 Chromium。
+
+<a id="agent-install"></a>
+
+## Agent / AI 快速安装
+
+适用于 **macOS / Linux 的首次安装**。将下面整段命令交给 Agent 或粘贴到终端：只需 `curl`、`unzip` 和系统自带的 `shasum` / `sha256sum`，不需要 Node.js、pnpm、Git 或 GitHub CLI，也不执行远程脚本。
+
+命令下载固定版本 v1.0.2，校验 SHA-256 后解压至 `~/.local/share/kaola-header-switcher`。目标路径已存在（包括符号链接）时立即停止，不覆盖旧文件；已有安装请按[升级说明](#怎么升级而不丢规则)沿用原目录。
+
+```sh
+sh <<'KAOLA_INSTALL'
+set -eu
+: "${HOME:?未设置 HOME，请停止并检查当前用户环境}"
+kaola_dir="$HOME/.local/share/kaola-header-switcher"
+kaola_url='https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.2/kaola-header-switcher-1.0.2.zip'
+kaola_sha256='30c097afa39e8c21249b0a99348d008c33d365a0d913a8acc76857f76e7e7b19'
+
+for kaola_cmd in curl unzip mktemp; do
+  command -v "$kaola_cmd" >/dev/null 2>&1 || {
+    printf '缺少命令：%s，请先安装后重试。\n' "$kaola_cmd" >&2
+    exit 1
+  }
+done
+if command -v shasum >/dev/null 2>&1; then
+  kaola_checksum='shasum'
+elif command -v sha256sum >/dev/null 2>&1; then
+  kaola_checksum='sha256sum'
+else
+  printf '缺少 shasum 或 sha256sum，未下载任何文件。\n' >&2
+  exit 1
+fi
+if [ -e "$kaola_dir" ] || [ -L "$kaola_dir" ]; then
+  printf '目标路径已存在，未覆盖：%s\n请按 README 的升级说明处理原安装。\n' "$kaola_dir" >&2
+  exit 1
+fi
+
+kaola_tmp=$(mktemp -d "${TMPDIR:-/tmp}/kaola-header-switcher.XXXXXXXX")
+kaola_zip="$kaola_tmp/extension.zip"
+trap 'rm -f "$kaola_zip"; rmdir "$kaola_tmp"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+curl --fail --location --silent --show-error \
+  --proto '=https' --proto-redir '=https' \
+  --connect-timeout 15 --max-time 300 \
+  --output "$kaola_zip" "$kaola_url"
+(
+  cd "$kaola_tmp"
+  if [ "$kaola_checksum" = 'shasum' ]; then
+    printf '%s  extension.zip\n' "$kaola_sha256" | shasum -a 256 -c -
+  else
+    printf '%s  extension.zip\n' "$kaola_sha256" | sha256sum -c -
+  fi
+)
+unzip -tq "$kaola_zip"
+mkdir -p "$HOME/.local/share"
+mkdir "$kaola_dir"
+unzip -nq "$kaola_zip" -d "$kaola_dir"
+[ -f "$kaola_dir/manifest.json" ] || {
+  printf '缺少 manifest.json，请勿加载此目录：%s\n' "$kaola_dir" >&2
+  exit 1
+}
+printf '\n文件已准备好，尚未安装到浏览器。\n请在 chrome://extensions 开启开发者模式，加载：\n%s\n' "$kaola_dir"
+KAOLA_INSTALL
+```
+
+下载或校验失败会停止，不跳过校验。解压若中断，会保留目标目录供检查，不自动删除；请勿加载不完整文件。
+
+**命令完成只表示文件准备好了，不代表浏览器已安装。** 最后仍需在 `chrome://extensions` 开启「开发者模式」，点击「加载已解压的扩展程序」，选择命令输出的、含 `manifest.json` 的目录，再固定考拉图标。Agent 遇到浏览器确认或权限请求应交给用户，不修改日常浏览器 Profile、不卸载现有扩展、不读取已有规则或敏感请求头，也不绕过确认。
+
+macOS 选择文件夹时，可按 `⌘⇧G` 粘贴命令输出的完整路径，进入隐藏的 `.local` 目录。
+
+可直接交给 Agent：**「按 README 的 Agent / AI 快速安装命令准备插件文件；已有安装就停止，浏览器确认和权限由我处理。」**
 
 ## 使用
 
