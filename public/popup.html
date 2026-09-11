@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>有问题找kaola</title>
+        <link rel="stylesheet" href="popup.css">
+        <script type="module" src="popup.js"></script>
+    </head>
+    <body>
+        <!-- 原有目录与编辑区的手绘迭代；Rough.js 绘制装饰，原生控件承载实际交互。 -->
+        <main class="popup" id="popup" aria-label="有问题找kaola 请求头配置" aria-busy="true">
+            <header class="tab-masthead" data-sketch="masthead">
+                <div class="brandline">
+                    <img class="brand-koala" src="icons/icon-128.png" width="48" height="48" alt="卡通考拉">
+                    <div class="brand-copy">
+                        <h1>有问题找kaola</h1>
+                        <span class="edition">请求头小助手 · 按标签页配置</span>
+                    </div>
+                </div>
+                <div class="tab-tools">
+                    <form class="emoji-form" id="tabEmojiForm">
+                        <label class="emoji-label" for="tabEmoji">
+                            标题表情
+                            <span class="emoji-shell" data-sketch="input">
+                                <input id="tabEmoji" name="tabEmoji" aria-label="标题表情" value="🐨" placeholder="🐨" autocomplete="off" spellcheck="false" title="仅此标签页：填写一个表情，留空恢复默认考拉" disabled>
+                            </span>
+                        </label>
+                        <button class="emoji-save" id="saveTabEmoji" type="submit" data-sketch="box" disabled>保存表情</button>
+                    </form>
+                    <button class="quiet-action" id="clearCurrent" type="button" disabled>停用此标签页</button>
+                </div>
+                <div class="tab-summary">
+                    <div class="tab-info">
+                        <p class="eyebrow">当前标签页</p>
+                        <p class="tab-title" id="tabTitle">正在读取…</p>
+                        <p class="tab-url" id="tabUrl"></p>
+                    </div>
+                    <div class="active-stamp inactive" id="activeStamp" data-sketch="stamp" aria-live="polite">
+                        <span class="lane-code" id="activeCode">—</span>
+                        <span class="active-copy">
+                            <strong id="activeRuleName">尚未启用</strong>
+                            <span id="activeState">读取标签页状态中</span>
+                        </span>
+                    </div>
+                </div>
+            </header>
+            <div class="workspace">
+                <nav class="rule-index" aria-labelledby="ruleHeading" data-sketch="divider">
+                    <div class="section-heading">
+                        <h2 id="ruleHeading">规则目录</h2>
+                        <span class="count" id="ruleCount">—</span>
+                    </div>
+                    <div class="rule-scroll">
+                        <ul class="rule-list" id="ruleList"></ul>
+                        <p class="list-empty" id="listEmpty">正在读取规则…</p>
+                    </div>
+                    <p class="index-note">每个标签页独立启用一条规则。</p>
+                    <button class="new-rule" id="newRule" type="button" data-sketch="new" disabled>＋ 新建规则</button>
+                </nav>
+                <section class="edit-sheet" id="editor" aria-label="规则编辑区"></section>
+            </div>
+            <div class="status-bar" id="statusBar" data-sketch="separator">
+                <p id="statusMessage" role="status" aria-live="polite">正在读取配置…</p>
+                <button class="text-btn" id="retry" type="button" hidden>重试</button>
+            </div>
+        </main>
+    </body>
+</html>

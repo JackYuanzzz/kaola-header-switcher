@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lane Header Switcher — Rams Console</title>
+  <!--
+    ASSUMPTIONS
+    1. This is one visual-direction prototype for a fixed 720 x 600 Chrome popup.
+    2. “文档联调” is active for the current tab and its inline inspector is open.
+    3. Images are not content-critical, so all visual meaning is carried by type, rules,
+       state color, and simple CSS geometry. No external assets are loaded.
+
+    REASONING
+    - The form comes from the product's binding model: CURRENT TAB -> RULE -> BADGE.
+      That signal chain is the visual anchor, not a decorative hero.
+    - Rams/Braun functionalism is expressed through a warm neutral surface, charcoal type,
+      one signal green, strict numbering, tabular alignment, and near-square controls.
+    - The editor is an inline inspector below the rule table so configuration and activation
+      remain one continuous operational surface.
+
+    PLACEHOLDERS
+    - This file models UI behavior locally; it does not call Chrome APIs or mutate DNR rules.
+    - “保存” only demonstrates inline feedback and updates the visible active-rule summary.
+  -->
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #e8e6de;
+      --paper-deep: #d7d5cc;
+      --ink: #20221f;
+      --muted: #65675f;
+      --line: #94968d;
+      --soft-line: #c2c1b8;
+      --signal: #087842;
+      --signal-dark: #075c34;
+      --white: #f8f7f1;
+      --danger: #8a3e32;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 720px;
+      height: 600px;
+      overflow: hidden;
+      background: var(--paper);
+    }
+
+    body {
+      color: var(--ink);
+      font-family: "Avenir Next", "DIN Alternate", "PingFang SC", sans-serif;
+      font-size: 14px;
+      line-height: 1.35;
+      text-rendering: geometricPrecision;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      min-height: 32px;
+      border: 1px solid var(--ink);
+      border-radius: 1px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+    }
+
+    button:hover {
+      background: var(--ink);
+      color: var(--white);
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--signal) 36%, transparent);
+      outline-offset: 1px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .42;
+    }
+
+    .popup {
+      display: grid;
+      grid-template-rows: 42px 104px 34px 170px minmax(0, 1fr);
+      width: 720px;
+      height: 600px;
+      background:
+        linear-gradient(to right, transparent 31px, color-mix(in srgb, var(--line) 22%, transparent) 32px, transparent 33px),
+        var(--paper);
+      border: 1px solid var(--ink);
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: stretch;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 16px;
+      font-family: "DIN Alternate", "Avenir Next Condensed", "PingFang SC", sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .wordmark-mark {
+      position: relative;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--ink);
+    }
+
+    .wordmark-mark::after {
+      content: "";
+      position: absolute;
+      right: 2px;
+      bottom: 2px;
+      width: 6px;
+      height: 6px;
+      background: var(--signal);
+    }
+
+    .scope,
+    .status-key {
+      display: flex;
+      align-items: center;
+      border-left: 1px solid var(--ink);
+      padding: 0 14px;
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      letter-spacing: .05em;
+    }
+
+    .status-key {
+      gap: 8px;
+      color: var(--signal-dark);
+      font-weight: 700;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--signal);
+      border-radius: 50%;
+    }
+
+    .signal-panel {
+      display: grid;
+      grid-template-rows: 27px 1fr;
+      padding: 0 16px 12px;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .section-number {
+      color: var(--ink);
+    }
+
+    .signal-chain {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) 36px minmax(0, 1fr) 36px 82px;
+      min-height: 64px;
+      border: 1px solid var(--ink);
+      background: var(--white);
+    }
+
+    .signal-node {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      padding: 4px 12px;
+      line-height: 1.1;
+      min-width: 0;
+    }
+
+    .signal-node small {
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .signal-node strong {
+      overflow: hidden;
+      font-size: 15px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .signal-node code {
+      color: var(--signal-dark);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .signal-link {
+      position: relative;
+      border-left: 1px solid var(--soft-line);
+      border-right: 1px solid var(--soft-line);
+      background: var(--paper-deep);
+    }
+
+    .signal-link::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 8px;
+      width: 17px;
+      height: 1px;
+      background: var(--ink);
+    }
+
+    .signal-link::after {
+      content: "";
+      position: absolute;
+      top: calc(50% - 3px);
+      right: 8px;
+      border-width: 3px 0 3px 5px;
+      border-style: solid;
+      border-color: transparent transparent transparent var(--ink);
+    }
+
+    .badge-node {
+      place-items: center;
+      background: var(--signal);
+      color: var(--white);
+    }
+
+    .badge-node small {
+      color: color-mix(in srgb, var(--white) 76%, transparent);
+    }
+
+    .badge-node strong {
+      font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif;
+      font-size: 22px;
+      letter-spacing: .08em;
+    }
+
+    .notice {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      color: #3f413c;
+      font-size: 13px;
+    }
+
+    .notice::before {
+      content: "i";
+      display: grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      font-family: Georgia, serif;
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    .rules-panel {
+      border-bottom: 1px solid var(--ink);
+      overflow: hidden;
+    }
+
+    .rules-heading {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      height: 36px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .new-rule {
+      min-height: 26px;
+      padding: 0 11px;
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .rule-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .rule-table col:nth-child(1) { width: 42px; }
+    .rule-table col:nth-child(2) { width: 184px; }
+    .rule-table col:nth-child(3) { width: 72px; }
+    .rule-table col:nth-child(4) { width: 164px; }
+    .rule-table col:nth-child(5) { width: 72px; }
+    .rule-table col:nth-child(6) { width: 80px; }
+    .rule-table col:nth-child(7) { width: 74px; }
+
+    .rule-table thead {
+      height: 24px;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .rule-table th,
+    .rule-table td {
+      border-right: 1px solid var(--soft-line);
+      border-bottom: 1px solid var(--soft-line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .rule-table th {
+      padding: 0 8px;
+      font-weight: 700;
+    }
+
+    .rule-table td {
+      height: 36px;
+      padding: 0 8px;
+    }
+
+    .rule-table th:last-child,
+    .rule-table td:last-child {
+      border-right: 0;
+    }
+
+    .rule-table tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .rule-table tbody tr.is-active {
+      background: var(--white);
+      box-shadow: inset 5px 0 0 var(--signal);
+    }
+
+    .row-no,
+    .lane-code,
+    .headers-value {
+      font-family: "SFMono-Regular", Menlo, monospace;
+    }
+
+    .row-no {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .rule-name {
+      overflow: hidden;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .lane-code {
+      display: inline-block;
+      min-width: 38px;
+      padding: 2px 4px;
+      background: var(--ink);
+      color: var(--white);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: .05em;
+    }
+
+    tr.is-active .lane-code {
+      background: var(--signal);
+    }
+
+    .lane-value {
+      overflow: hidden;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .headers-value {
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .compact-button {
+      display: block;
+      min-height: 25px;
+      width: 100%;
+      padding: 0 6px;
+      border-color: var(--line);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .compact-button.active {
+      border-color: var(--signal);
+      background: var(--signal);
+      color: var(--white);
+    }
+
+    .compact-button.active:hover {
+      background: var(--signal-dark);
+    }
+
+    .inspector {
+      display: grid;
+      grid-template-rows: 38px 51px 20px 36px 36px minmax(0, 1fr);
+      min-height: 0;
+      background: var(--paper-deep);
+    }
+
+    .inspector-heading {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .editing-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--signal-dark);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .05em;
+    }
+
+    .identity-fields {
+      display: grid;
+      grid-template-columns: 1fr 145px;
+      gap: 1px;
+      background: var(--ink);
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .field-block {
+      display: grid;
+      grid-template-columns: 98px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px 7px 16px;
+      background: var(--paper);
+    }
+
+    .field-block.short {
+      grid-template-columns: 48px 1fr;
+      padding-left: 10px;
+    }
+
+    label,
+    .field-label {
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+
+    input {
+      width: 100%;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--white);
+      color: var(--ink);
+      padding: 0 9px;
+      font-size: 14px;
+    }
+
+    .headers-labels,
+    .header-row {
+      display: grid;
+      grid-template-columns: 37px 202px minmax(0, 1fr) 68px;
+      align-items: center;
+    }
+
+    .headers-labels {
+      border-bottom: 1px solid var(--soft-line);
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .headers-labels span {
+      padding: 0 8px;
+    }
+
+    .header-row {
+      border-bottom: 1px solid var(--soft-line);
+      background: var(--paper);
+    }
+
+    .header-row > * {
+      margin: 0 7px;
+    }
+
+    .header-index {
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .header-row input {
+      height: 28px;
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+    }
+
+    .remove-header {
+      min-height: 26px;
+      border-color: transparent;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .remove-header:hover {
+      border-color: var(--danger);
+      background: transparent;
+      color: var(--danger);
+    }
+
+    .inspector-footer {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 6px 16px;
+    }
+
+    .add-header {
+      min-height: 30px;
+      padding: 0 12px;
+      border-color: var(--line);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .inline-message {
+      min-width: 0;
+      color: var(--signal-dark);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .inline-message.show {
+      opacity: 1;
+    }
+
+    .danger-action,
+    .cancel-action,
+    .save-action {
+      min-height: 31px;
+      padding: 0 13px;
+      font-weight: 700;
+    }
+
+    .danger-action {
+      border-color: transparent;
+      color: var(--danger);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .danger-action:hover {
+      border-color: var(--danger);
+      background: transparent;
+      color: var(--danger);
+    }
+
+    .cancel-action {
+      border-color: var(--line);
+    }
+
+    .save-action {
+      min-width: 72px;
+      border-color: var(--signal-dark);
+      background: var(--signal);
+      color: var(--white);
+    }
+
+    .save-action:hover {
+      border-color: var(--signal-dark);
+      background: var(--signal-dark);
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <main class="popup" aria-label="Lane Header Switcher 弹窗原型">
+    <header class="masthead">
+      <div class="wordmark">
+        <span class="wordmark-mark" aria-hidden="true"></span>
+        <span>Lane Header Switcher</span>
+      </div>
+      <div class="scope">CURRENT TAB</div>
+      <div class="status-key"><span class="status-dot" aria-hidden="true"></span>BOUND</div>
+    </header>
+
+    <section class="signal-panel" aria-labelledby="signal-title">
+      <h1 class="section-label" id="signal-title"><span class="section-number">01</span> Binding signal</h1>
+      <div class="signal-chain">
+        <div class="signal-node">
+          <small>Current tab</small>
+          <strong>test.xxxx.com / 编辑器</strong>
+        </div>
+        <div class="signal-link" aria-hidden="true"></div>
+        <div class="signal-node">
+          <small>Bound rule</small>
+          <strong id="bound-rule-name">文档联调</strong>
+          <code id="bound-rule-lane">x-lane: doc-20260910</code>
+        </div>
+        <div class="signal-link" aria-hidden="true"></div>
+        <div class="signal-node badge-node">
+          <small>Badge</small>
+          <strong id="bound-badge">DOC</strong>
+        </div>
+      </div>
+    </section>
+
+    <p class="notice">仅对当前标签页生效；会写入规则中的全部请求头。</p>
+
+    <section class="rules-panel" aria-labelledby="rules-title">
+      <div class="rules-heading">
+        <h2 class="section-label" id="rules-title"><span class="section-number">02</span> Saved rules</h2>
+        <button class="new-rule" type="button" id="new-rule">＋ 新建规则</button>
+      </div>
+      <table class="rule-table">
+        <caption class="visually-hidden">已保存的请求头规则</caption>
+        <colgroup><col><col><col><col><col><col><col></colgroup>
+        <thead>
+          <tr><th>No.</th><th>规则</th><th>Lane</th><th>x-lane 内容</th><th>请求头</th><th>当前 Tab</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          <tr class="is-active" data-rule="文档联调" data-code="DOC" data-lane="doc-20260910">
+            <td class="row-no">01</td>
+            <td class="rule-name">文档联调</td>
+            <td><span class="lane-code">DOC</span></td>
+            <td class="lane-value">doc-20260910</td>
+            <td class="headers-value">2</td>
+            <td><button class="compact-button active toggle-rule" type="button" aria-pressed="true">已启用</button></td>
+            <td><button class="compact-button edit-rule" type="button">编辑</button></td>
+          </tr>
+          <tr data-rule="主体修复" data-code="MAIN" data-lane="main-fix">
+            <td class="row-no">02</td>
+            <td class="rule-name">主体修复</td>
+            <td><span class="lane-code">MAIN</span></td>
+            <td class="lane-value">main-fix</td>
+            <td class="headers-value">1</td>
+            <td><button class="compact-button toggle-rule" type="button" aria-pressed="false">启用</button></td>
+            <td><button class="compact-button edit-rule" type="button">编辑</button></td>
+          </tr>
+          <tr data-rule="图视频轮询 oncall" data-code="ONC" data-lane="media-oncall">
+            <td class="row-no">03</td>
+            <td class="rule-name">图视频轮询 oncall</td>
+            <td><span class="lane-code">ONC</span></td>
+            <td class="lane-value">media-oncall</td>
+            <td class="headers-value">1</td>
+            <td><button class="compact-button toggle-rule" type="button" aria-pressed="false">启用</button></td>
+            <td><button class="compact-button edit-rule" type="button">编辑</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="inspector" aria-labelledby="inspector-title">
+      <div class="inspector-heading">
+        <h2 class="section-label" id="inspector-title"><span class="section-number">03</span> Inline inspector · 编辑文档联调</h2>
+        <div class="editing-state"><span class="status-dot" aria-hidden="true"></span>EDITING / IN USE</div>
+      </div>
+
+      <div class="identity-fields">
+        <div class="field-block">
+          <label for="rule-name">规则名称</label>
+          <input id="rule-name" value="文档联调" autocomplete="off">
+        </div>
+        <div class="field-block short">
+          <label for="rule-code">简称</label>
+          <input id="rule-code" value="DOC" maxlength="4" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="headers-labels" aria-hidden="true">
+        <span>No.</span><span>请求头名称</span><span>请求头内容</span><span>操作</span>
+      </div>
+
+      <div class="header-row">
+        <span class="header-index">01</span>
+        <input aria-label="第一个请求头名称" value="x-lane" autocomplete="off">
+        <input aria-label="第一个请求头内容" value="doc-20260910" autocomplete="off">
+        <button class="remove-header" type="button">移除</button>
+      </div>
+
+      <div class="header-row">
+        <span class="header-index">02</span>
+        <input aria-label="第二个请求头名称" value="x-debug-user" autocomplete="off">
+        <input aria-label="第二个请求头内容" value="kaola" autocomplete="off">
+        <button class="remove-header" type="button">移除</button>
+      </div>
+
+      <div class="inspector-footer">
+        <button class="add-header" type="button" id="add-header">＋ 增加请求头</button>
+        <p class="inline-message" id="inline-message" role="status" aria-live="polite"></p>
+        <button class="danger-action" type="button" id="delete-rule">删除规则</button>
+        <button class="cancel-action" type="button" id="cancel-edit">取消</button>
+        <button class="save-action" type="button" id="save-rule">保存</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const rows = Array.from(document.querySelectorAll('.rule-table tbody tr'));
+    const message = document.getElementById('inline-message');
+    const inspectorTitle = document.getElementById('inspector-title');
+    const ruleNameInput = document.getElementById('rule-name');
+    const ruleCodeInput = document.getElementById('rule-code');
+
+    function showMessage(text, tone = 'success') {
+      message.textContent = text;
+      message.style.color = tone === 'error' ? 'var(--danger)' : 'var(--signal-dark)';
+      message.classList.add('show');
+      window.clearTimeout(showMessage.timer);
+      showMessage.timer = window.setTimeout(() => message.classList.remove('show'), 2600);
+    }
+
+    function activateRule(row) {
+      const wasActive = row.classList.contains('is-active');
+      rows.forEach(item => {
+        item.classList.remove('is-active');
+        const button = item.querySelector('.toggle-rule');
+        button.classList.remove('active');
+        button.setAttribute('aria-pressed', 'false');
+        button.textContent = '启用';
+      });
+
+      if (wasActive) {
+        document.getElementById('bound-rule-name').textContent = '未绑定规则';
+        document.getElementById('bound-rule-lane').textContent = '全部请求头已清除';
+        document.getElementById('bound-badge').textContent = '—';
+        showMessage('已停用：当前 Tab 的规则与角标已清除');
+        return;
+      }
+
+      row.classList.add('is-active');
+      const button = row.querySelector('.toggle-rule');
+      button.classList.add('active');
+      button.setAttribute('aria-pressed', 'true');
+      button.textContent = '已启用';
+      document.getElementById('bound-rule-name').textContent = row.dataset.rule;
+      document.getElementById('bound-rule-lane').textContent = `x-lane: ${row.dataset.lane}`;
+      document.getElementById('bound-badge').textContent = row.dataset.code.slice(0, 4);
+      showMessage(`已替换：当前 Tab 使用「${row.dataset.rule}」`);
+    }
+
+    document.querySelectorAll('.toggle-rule').forEach(button => {
+      button.addEventListener('click', () => activateRule(button.closest('tr')));
+    });
+
+    document.querySelectorAll('.edit-rule').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('tr');
+        ruleNameInput.value = row.dataset.rule;
+        ruleCodeInput.value = row.dataset.code;
+        inspectorTitle.innerHTML = `<span class="section-number">03</span> Inline inspector · 编辑${row.dataset.rule}`;
+        showMessage(`已打开「${row.dataset.rule}」编辑器`);
+      });
+    });
+
+    document.querySelectorAll('.remove-header').forEach(button => {
+      button.addEventListener('click', () => {
+        const visibleRows = document.querySelectorAll('.header-row:not([hidden])');
+        if (visibleRows.length <= 1) {
+          showMessage('规则至少保留一个请求头', 'error');
+          return;
+        }
+        button.closest('.header-row').hidden = true;
+        showMessage('请求头已移除；保存后同步到使用此规则的 Tab');
+      });
+    });
+
+    document.getElementById('add-header').addEventListener('click', () => {
+      const hiddenRow = document.querySelector('.header-row[hidden]');
+      if (hiddenRow) {
+        hiddenRow.hidden = false;
+        showMessage('已恢复请求头行');
+      } else {
+        showMessage('原型画布已展示完整的两行编辑结构');
+      }
+    });
+
+    document.getElementById('save-rule').addEventListener('click', () => {
+      const name = ruleNameInput.value.trim();
+      const code = ruleCodeInput.value.trim().toUpperCase();
+      if (!name || !code) {
+        showMessage('规则名称与 lane 简称不能为空', 'error');
+        return;
+      }
+      document.getElementById('bound-rule-name').textContent = name;
+      document.getElementById('bound-badge').textContent = code.slice(0, 4);
+      showMessage('已保存；使用此规则的 Tab 将同步新内容');
+    });
+
+    document.getElementById('cancel-edit').addEventListener('click', () => {
+      ruleNameInput.value = '文档联调';
+      ruleCodeInput.value = 'DOC';
+      showMessage('已取消未保存的修改');
+    });
+
+    document.getElementById('delete-rule').addEventListener('click', () => {
+      showMessage('删除属于危险操作；生产版将在此处二次确认', 'error');
+    });
+
+    document.getElementById('new-rule').addEventListener('click', () => {
+      ruleNameInput.value = '';
+      ruleCodeInput.value = '';
+      inspectorTitle.innerHTML = '<span class="section-number">03</span> Inline inspector · 新建规则';
+      ruleNameInput.focus();
+      showMessage('填写规则名称、简称与请求头后保存');
+    });
+  </script>
+</body>
+</html>

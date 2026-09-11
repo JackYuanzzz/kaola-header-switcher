@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lane Header Switcher · Warm Editorial</title>
+  <!--
+    ASSUMPTIONS
+    1. 这是 720×600 的 Chrome popup 首屏，不模拟浏览器外壳，也不改变后台 DNR 逻辑。
+    2. “文档联调”保持当前 Tab 已启用，同时直接展开编辑；保存会就地更新此规则。
+    3. 另外两条规则的请求头明细未在共同 spec 中给出，所以只展示真实名称、简称和数量，不编造内容。
+
+    REASONING
+    - form 来自“Tab 与请求头绑定”：顶部像书籍扉页一样固定当前 Tab 与 DOC 角标，成为全屏叙事锚点。
+    - 主体借用出版物的“目录 + 校样纸”关系：左侧扫规则，右侧直接校订当前规则，减少页面跳转。
+    - 色彩由暖色出版物语境采样并收敛为奶油纸、赤陶油墨、低饱和苔绿；绿只表达已启用，橙只表达编辑与主操作。
+    - 衬线只用于产品刊头与编辑章标题；全部操作、字段和状态保留清晰的系统无衬线，以免工具变成宣传页。
+  -->
+  <style>
+    :root {
+      --paper: #f3eee3;
+      --paper-deep: #e9e0d1;
+      --sheet: #fbf7ef;
+      --ink: #25231f;
+      --ink-soft: #6e685f;
+      --line: #cfc4b2;
+      --line-strong: #aaa08f;
+      --terracotta: #b85f43;
+      --terracotta-dark: #87452f;
+      --terracotta-wash: #ecd0c4;
+      --moss: #5f745e;
+      --moss-dark: #40553f;
+      --moss-wash: #dce3d6;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --serif: Georgia, "Songti SC", "STSong", serif;
+      color-scheme: light;
+      font-synthesis: none;
+      line-break: strict;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      min-width: 720px;
+      min-height: 600px;
+      background: #d7d1c7;
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    button,
+    input { font: inherit; }
+
+    button { color: inherit; }
+
+    .popup {
+      width: 720px;
+      height: 600px;
+      overflow: hidden;
+      background: var(--paper);
+      border: 1px solid #bdb4a6;
+      box-shadow: 0 18px 55px rgba(49, 41, 31, 0.18);
+      display: grid;
+      grid-template-rows: 142px minmax(0, 1fr);
+    }
+
+    .tab-masthead {
+      position: relative;
+      padding: 18px 22px 16px;
+      background:
+        linear-gradient(rgba(116, 92, 65, 0.045) 1px, transparent 1px),
+        var(--paper);
+      background-size: 100% 24px;
+      border-bottom: 1px solid var(--line-strong);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: auto 1fr;
+      column-gap: 20px;
+    }
+
+    .brandline {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brandline h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .edition {
+      color: var(--terracotta-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .quiet-action {
+      min-height: 30px;
+      padding: 4px 0 4px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 4px;
+    }
+
+    .quiet-action:hover { text-decoration-color: currentColor; }
+
+    .tab-summary {
+      grid-column: 1 / -1;
+      align-self: end;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 18px;
+    }
+
+    .eyebrow {
+      margin: 0 0 3px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .tab-title {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 26px;
+      line-height: 1.15;
+      font-weight: 600;
+      text-wrap: balance;
+    }
+
+    .tab-title .path {
+      color: var(--ink-soft);
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .active-stamp {
+      min-width: 171px;
+      padding: 8px 10px;
+      border: 1px solid #82927d;
+      background: var(--moss-wash);
+      display: grid;
+      grid-template-columns: 43px 1fr;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .lane-code {
+      height: 31px;
+      display: grid;
+      place-items: center;
+      background: var(--moss-dark);
+      color: #fffdf8;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .active-copy strong,
+    .active-copy span { display: block; }
+
+    .active-copy strong {
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .active-copy span {
+      margin-top: 2px;
+      color: var(--moss-dark);
+      font-size: 12px;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 282px minmax(0, 1fr);
+    }
+
+    .rule-index {
+      min-height: 0;
+      padding: 16px 15px 14px 20px;
+      border-right: 1px solid var(--line-strong);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 750;
+      letter-spacing: 0.02em;
+    }
+
+    .count {
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .rule-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .rule {
+      position: relative;
+      padding: 10px 0 9px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rule.active::before {
+      content: "";
+      position: absolute;
+      left: -20px;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--moss);
+    }
+
+    .rule-top {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .mini-code {
+      height: 25px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      background: var(--sheet);
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .rule.active .mini-code {
+      border-color: var(--moss);
+      background: var(--moss);
+      color: #fff;
+    }
+
+    .rule-name {
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 680;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .rule-meta {
+      margin: 4px 0 0 44px;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .rule-actions {
+      margin: 5px 0 0 44px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .text-btn {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--terracotta-dark);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .text-btn.secondary { color: var(--ink-soft); }
+
+    .switch {
+      position: relative;
+      width: 34px;
+      height: 20px;
+      padding: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: #d9d1c4;
+      cursor: pointer;
+      transition: background 130ms ease, border-color 130ms ease;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      top: 2px;
+      left: 2px;
+      border-radius: 50%;
+      background: #fffaf0;
+      box-shadow: 0 1px 2px rgba(45, 39, 31, 0.25);
+      transition: transform 130ms ease;
+    }
+
+    .switch[aria-checked="true"] {
+      border-color: var(--moss-dark);
+      background: var(--moss);
+    }
+
+    .switch[aria-checked="true"]::after { transform: translateX(14px); }
+
+    .new-rule {
+      width: 100%;
+      min-height: 35px;
+      margin-top: auto;
+      border: 1px solid var(--terracotta);
+      background: transparent;
+      color: var(--terracotta-dark);
+      font-weight: 740;
+      cursor: pointer;
+    }
+
+    .new-rule:hover { background: var(--terracotta-wash); }
+
+    .edit-sheet {
+      min-width: 0;
+      padding: 15px 18px 13px;
+      background: var(--sheet);
+      box-shadow: inset 10px 0 22px rgba(85, 66, 43, 0.035);
+      overflow: auto;
+    }
+
+    .sheet-kicker {
+      margin: 0 0 2px;
+      color: var(--terracotta-dark);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .sheet-title-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--terracotta);
+    }
+
+    .sheet-title-row h2 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 600;
+    }
+
+    .sync-note {
+      color: var(--moss-dark);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .form-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 102px;
+      gap: 10px;
+    }
+
+    label {
+      display: block;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    input {
+      width: 100%;
+      height: 34px;
+      margin-top: 4px;
+      padding: 6px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 0;
+      background: #fffdf8;
+      color: var(--ink);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--terracotta-dark);
+      box-shadow: 0 0 0 2px rgba(184, 95, 67, 0.18);
+    }
+
+    .headers-block {
+      margin-top: 11px;
+    }
+
+    .headers-labels,
+    .header-row {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) 27px;
+      gap: 7px;
+      align-items: end;
+    }
+
+    .headers-labels {
+      margin-bottom: 3px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .header-row { margin-bottom: 7px; }
+
+    .header-row input { margin-top: 0; }
+
+    .remove-header {
+      width: 27px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .remove-header:hover { color: #8c3f35; background: #f0ddd5; }
+
+    .add-header {
+      padding: 2px 0;
+      border: 0;
+      background: transparent;
+      color: var(--terracotta-dark);
+      font-size: 12px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .error {
+      min-height: 18px;
+      margin: 5px 0 0;
+      color: #9a352f;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .sheet-footer {
+      margin-top: 3px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .danger-link {
+      width: fit-content;
+      padding: 2px 0;
+      border: 0;
+      background: transparent;
+      color: #857d72;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .footer-actions { display: flex; gap: 8px; }
+
+    .btn {
+      min-width: 64px;
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 0;
+      background: transparent;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .btn:hover { background: var(--paper-deep); }
+
+    .btn.primary {
+      border-color: var(--terracotta-dark);
+      background: var(--terracotta);
+      color: #fffdf8;
+    }
+
+    .btn.primary:hover { background: var(--terracotta-dark); }
+
+    .scope-note {
+      grid-column: 1 / -1;
+      margin: 6px 0 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.4;
+      text-align: right;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--terracotta-dark);
+      outline-offset: 2px;
+    }
+
+    button:disabled {
+      opacity: 0.46;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <main class="popup" aria-label="Lane Header Switcher popup">
+    <header class="tab-masthead">
+      <div class="brandline">
+        <h1>Lane Header Switcher</h1>
+        <span class="edition">Tab edition</span>
+      </div>
+      <button class="quiet-action" type="button" id="clearCurrent">清除此 Tab</button>
+
+      <div class="tab-summary">
+        <div>
+          <p class="eyebrow">当前标签页</p>
+          <p class="tab-title">test.xxxx.com <span class="path">/ 编辑器</span></p>
+        </div>
+        <div class="active-stamp" id="activeStamp" aria-live="polite">
+          <span class="lane-code" id="activeCode">DOC</span>
+          <span class="active-copy">
+            <strong id="activeRuleName">文档联调</strong>
+            <span id="activeState">已启用 · 2 个请求头</span>
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <nav class="rule-index" aria-labelledby="ruleHeading">
+        <div class="section-heading">
+          <h2 id="ruleHeading">规则目录</h2>
+          <span class="count">3 条</span>
+        </div>
+
+        <ul class="rule-list">
+          <li class="rule active" data-name="文档联调" data-code="DOC" data-count="2">
+            <div class="rule-top">
+              <span class="mini-code">DOC</span>
+              <span class="rule-name">文档联调</span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用文档联调"></button>
+            </div>
+            <p class="rule-meta">2 个请求头 · 当前 Tab 使用中</p>
+            <div class="rule-actions">
+              <button class="text-btn" type="button">正在编辑</button>
+            </div>
+          </li>
+
+          <li class="rule" data-name="主体修复" data-code="MAIN" data-count="1">
+            <div class="rule-top">
+              <span class="mini-code">MAIN</span>
+              <span class="rule-name">主体修复</span>
+              <button class="switch" type="button" role="switch" aria-checked="false" aria-label="启用主体修复"></button>
+            </div>
+            <p class="rule-meta">1 个请求头 · 未启用</p>
+            <div class="rule-actions">
+              <button class="text-btn secondary edit-other" type="button">编辑</button>
+            </div>
+          </li>
+
+          <li class="rule" data-name="图视频轮询 oncall" data-code="ONC" data-count="1">
+            <div class="rule-top">
+              <span class="mini-code">ONC</span>
+              <span class="rule-name">图视频轮询 oncall</span>
+              <button class="switch" type="button" role="switch" aria-checked="false" aria-label="启用图视频轮询 oncall"></button>
+            </div>
+            <p class="rule-meta">1 个请求头 · 未启用</p>
+            <div class="rule-actions">
+              <button class="text-btn secondary edit-other" type="button">编辑</button>
+            </div>
+          </li>
+        </ul>
+
+        <button class="new-rule" type="button" id="newRule">＋ 新建规则</button>
+      </nav>
+
+      <form class="edit-sheet" id="editForm" novalidate>
+        <p class="sheet-kicker">Rule proof · 01</p>
+        <div class="sheet-title-row">
+          <h2>编辑「文档联调」</h2>
+          <span class="sync-note">保存后同步已用 Tab</span>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            规则名称
+            <input name="ruleName" value="文档联调" autocomplete="off">
+          </label>
+          <label>
+            lane 简称
+            <input name="laneCode" value="DOC" maxlength="4" autocomplete="off">
+          </label>
+        </div>
+
+        <div class="headers-block">
+          <div class="headers-labels" aria-hidden="true">
+            <span>请求头名称</span>
+            <span>请求头内容</span>
+            <span></span>
+          </div>
+          <div id="headerRows">
+            <div class="header-row">
+              <input aria-label="请求头名称 1" value="x-lane" autocomplete="off">
+              <input aria-label="请求头内容 1" value="doc-20260910" autocomplete="off">
+              <button class="remove-header" type="button" aria-label="删除请求头 1">×</button>
+            </div>
+            <div class="header-row">
+              <input aria-label="请求头名称 2" value="x-debug-user" autocomplete="off">
+              <input aria-label="请求头内容 2" value="kaola" autocomplete="off">
+              <button class="remove-header" type="button" aria-label="删除请求头 2">×</button>
+            </div>
+          </div>
+          <button class="add-header" type="button" id="addHeader">＋ 增加请求头</button>
+          <p class="error" id="formError" role="alert"></p>
+        </div>
+
+        <div class="sheet-footer">
+          <button class="danger-link" type="button" id="deleteRule">删除规则</button>
+          <div class="footer-actions">
+            <button class="btn" type="button" id="cancelEdit">取消</button>
+            <button class="btn primary" type="submit">保存规则</button>
+          </div>
+          <p class="scope-note">仅对当前标签页生效；会写入规则中的全部请求头。</p>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    const switches = Array.from(document.querySelectorAll('.switch'));
+    const activeStamp = document.getElementById('activeStamp');
+    const activeCode = document.getElementById('activeCode');
+    const activeRuleName = document.getElementById('activeRuleName');
+    const activeState = document.getElementById('activeState');
+    const clearCurrent = document.getElementById('clearCurrent');
+    const editForm = document.getElementById('editForm');
+    const formError = document.getElementById('formError');
+    const headerRows = document.getElementById('headerRows');
+
+    function setCurrentRule(rule) {
+      document.querySelectorAll('.rule').forEach((item) => {
+        const isActive = item === rule;
+        item.classList.toggle('active', isActive);
+        const control = item.querySelector('.switch');
+        control.setAttribute('aria-checked', String(isActive));
+        control.setAttribute('aria-label', `${isActive ? '停用' : '启用'}${item.dataset.name}`);
+        item.querySelector('.rule-meta').textContent = `${item.dataset.count} 个请求头 · ${isActive ? '当前 Tab 使用中' : '未启用'}`;
+      });
+
+      if (!rule) {
+        activeStamp.style.background = 'var(--paper-deep)';
+        activeStamp.style.borderColor = 'var(--line-strong)';
+        activeCode.textContent = '—';
+        activeCode.style.background = 'var(--ink-soft)';
+        activeRuleName.textContent = '未选择规则';
+        activeState.textContent = '此 Tab 当前未写入请求头';
+        clearCurrent.disabled = true;
+        return;
+      }
+
+      activeStamp.removeAttribute('style');
+      activeCode.removeAttribute('style');
+      activeCode.textContent = rule.dataset.code;
+      activeRuleName.textContent = rule.dataset.name;
+      activeState.textContent = `已启用 · ${rule.dataset.count} 个请求头`;
+      clearCurrent.disabled = false;
+    }
+
+    switches.forEach((control) => {
+      control.addEventListener('click', () => {
+        const rule = control.closest('.rule');
+        const wasActive = control.getAttribute('aria-checked') === 'true';
+        setCurrentRule(wasActive ? null : rule);
+      });
+    });
+
+    clearCurrent.addEventListener('click', () => setCurrentRule(null));
+
+    document.getElementById('addHeader').addEventListener('click', () => {
+      const rowNumber = headerRows.children.length + 1;
+      const row = document.createElement('div');
+      row.className = 'header-row';
+      row.innerHTML = `
+        <input aria-label="请求头名称 ${rowNumber}" placeholder="x-header-name" autocomplete="off">
+        <input aria-label="请求头内容 ${rowNumber}" placeholder="value" autocomplete="off">
+        <button class="remove-header" type="button" aria-label="删除请求头 ${rowNumber}">×</button>
+      `;
+      headerRows.appendChild(row);
+      row.querySelector('input').focus();
+    });
+
+    headerRows.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('.remove-header');
+      if (!removeButton) return;
+      if (headerRows.children.length === 1) {
+        formError.textContent = '规则至少需要保留一个请求头。';
+        return;
+      }
+      removeButton.closest('.header-row').remove();
+      formError.textContent = '';
+    });
+
+    editForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const name = editForm.elements.ruleName.value.trim();
+      const code = editForm.elements.laneCode.value.trim().toUpperCase();
+      const headerInputs = Array.from(headerRows.querySelectorAll('input'));
+      if (!name || !code || headerInputs.some((input) => !input.value.trim())) {
+        formError.textContent = '请填写规则名称、lane 简称和全部请求头内容。';
+        return;
+      }
+      formError.textContent = '已保存。正在使用此规则的 Tab 会同步更新。';
+      const docRule = document.querySelector('.rule[data-code="DOC"]');
+      docRule.dataset.name = name;
+      docRule.dataset.code = code;
+      docRule.dataset.count = String(headerRows.children.length);
+      docRule.querySelector('.rule-name').textContent = name;
+      docRule.querySelector('.mini-code').textContent = code;
+      docRule.querySelector('.rule-meta').textContent = `${headerRows.children.length} 个请求头 · 当前 Tab 使用中`;
+      activeCode.textContent = code;
+      activeRuleName.textContent = name;
+      activeState.textContent = `已启用 · ${headerRows.children.length} 个请求头`;
+    });
+
+    document.getElementById('cancelEdit').addEventListener('click', () => {
+      editForm.reset();
+      formError.textContent = '已恢复到本次编辑前的内容。';
+    });
+
+    document.getElementById('newRule').addEventListener('click', () => {
+      formError.textContent = '新建规则会在此编辑纸张中打开。';
+    });
+
+    document.getElementById('deleteRule').addEventListener('click', () => {
+      formError.textContent = '删除前需要再次确认；此原型未执行删除。';
+    });
+
+    document.querySelectorAll('.edit-other').forEach((button) => {
+      button.addEventListener('click', () => {
+        formError.textContent = `将打开「${button.closest('.rule').dataset.name}」的编辑内容。`;
+      });
+    });
+  </script>
+</body>
+</html>
