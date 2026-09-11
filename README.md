@@ -1,12 +1,126 @@
-# 有问题找kaola
+<p align="center">
+  <img src="./assets/koala-icon.png" width="96" alt="有问题找kaola 的考拉图标">
+</p>
 
-给每个 Chrome 标签页单独选择一条请求头规则。同一个测试域名可以同时打开多个 Tab，分别使用不同的 `x-lane`。
+<h1 align="center">有问题找kaola</h1>
 
-在浏览器右上角的手绘风弹窗中直接新建、编辑、切换规则。界面使用 Rough.js 绘制真实 SVG 手绘线条，并配有卡通考拉图标。每条规则支持一组或多组请求头；只有每行的请求头内容必填，规则名称、规则简称及请求头名称都可以留空。
+<p align="center">同一个域名，多个 Tab，各用各的请求头。</p>
+<p align="center">v1.0.1 · Chrome 110 及以上 · 本地浏览器扩展</p>
+
+<p align="center">
+  <a href="https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest"><strong>下载已打包的插件</strong></a>
+  · <a href="#安装">安装</a>
+  · <a href="#使用">使用</a>
+  · <a href="#常见问题">常见问题</a>
+  · <a href="#开发">开发</a>
+</p>
+
+为不同测试环境保存请求头，在浏览器右上角直接选择当前标签页使用哪条规则。请求头配置、规则切换和标题表情，都在一个手绘风弹窗里完成。
+
+<p align="center">
+  <img src="./assets/popup-preview.png" width="720" alt="扩展弹窗演示：左侧规则目录，右侧请求头编辑区，顶部显示当前标签页和独立标题表情">
+</p>
+
+截图来自实际运行的扩展，使用演示配置，不含真实业务域名、页面标题、lane 或凭据。
 
 ## 安装
 
-这是一个可独立构建的浏览器扩展源码仓库，不需要安装其他项目。首次使用请先克隆并构建（需要 Node.js 22+、pnpm 9.15.0）：
+**日常使用不需要 Node.js，也不需要自己构建。**
+
+1. 打开 [GitHub Releases 下载页](https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest)，在 **Assets** 中下载 [lane-header-switcher-1.0.1.zip](https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.1/lane-header-switcher-1.0.1.zip)。不要选择 GitHub 自动生成的 `Source code`，它是源码，不是可安装的插件。
+2. 将 ZIP 解压到一个固定目录，安装后保留该目录，不要放在会自动清理的位置。
+3. 在 Chrome 地址栏输入 `chrome://extensions`，打开右上角「开发者模式」。
+4. 点击「加载已解压的扩展程序」，选择**直接包含 `manifest.json` 的目录**，不是 ZIP 文件，也不是它的父目录。
+5. 打开工具栏的扩展菜单，将「有问题找kaola」固定到工具栏。
+
+安装包已经包含运行所需文件。Edge 等 Chromium 浏览器可尝试同样的加载方式；本项目的自动化验收使用 Chromium。
+
+## 使用
+
+### 先配置一个标签页
+
+1. 打开需要联调的普通网页，点击工具栏上的考拉图标，再点「新建规则」。
+2. 在「请求头内容」填写测试环境值，例如演示值 `doc-demo`。其他字段可以先留空。
+3. 点击「保存并应用」。请求头名称会默认为 `x-lane`，当前 Tab 的后续请求开始使用这条规则。
+4. 需要让当前页面重新请求数据时，手动刷新页面。
+
+再打开同一个网址，在第二个 Tab 选择另一条规则，即可同时调试两个环境。一个 Tab 同时启用一条规则，切换开关只影响当前 Tab。
+
+### 字段怎么填
+
+| 字段 | 是否必填 | 留空时的行为 |
+| --- | --- | --- |
+| 请求头内容 | **每行必填** | 空值或纯空白无法保存 |
+| 请求头名称 | 选填 | 使用 `x-lane` |
+| 规则名称 | 选填 | 显示第一条非空请求头内容 |
+| 规则简称 | 选填，长度不限 | 显示第一条非空请求头内容 |
+
+点击「增加请求头」可配置多个字段，名称不区分大小写，不能重复。请求头内容原样保存；当前校验不接受换行、中文等非 Latin-1 字符。自动显示的名称会合并多余空白，但不会改写请求头内容；以后修改内容，留空的名称和简称会跟随更新。
+
+**内容是密钥时，请显式填写不含敏感信息的名称和简称。** 否则自动命名会把请求头内容显示到规则目录、标签页标题或工具栏提示中。
+
+### 保存、切换与删除
+
+- 「保存规则」保存配置，并同步所有正在使用这条规则的 Tab；新建规则仅保存时不会自动启用。
+- 「保存并应用」额外将规则绑定到当前 Tab。停用后，后续请求恢复网页自身提供的请求头。
+- 目录里每条规则旁都能直接「删除」，二次确认后才执行，并解除所有使用它的 Tab 绑定。
+- 删除其他规则会保留编辑区的未保存内容；删除正在编辑的规则时，会提示同时丢弃它的未保存修改。
+
+**规则内容共享，启用状态按 Tab 独立。** 如果两个 Tab 需要不同的请求头内容，请创建两条规则。
+
+### 看标题就知道当前环境
+
+启用规则后，允许注入的网页标题显示为 `🐨[完整简称] 原标题`。顶部「标题表情」可为当前 Tab 单独设置一个表情，例如 `🦊` 或 `👩🏽‍💻`；点「保存表情」生效，留空保存恢复 `🐨`。
+
+即使使用同一条规则，两个 Tab 也能设置不同表情。未启用规则时可先保存表情，停用后仍保留本会话的选择；保存表情不影响规则草稿。工具栏角标始终只取简称的前 **4 个字素**，不会截断组合 emoji，完整简称仍用于网页标题和悬停提示。停用后恢复原标题。
+
+### 哪些设置会保留
+
+| 操作 | Tab 规则绑定与标题表情 |
+| --- | --- |
+| 刷新、同一 Tab 内导航、扩展后台休眠 | 保留 |
+| 停用当前 Tab 的规则 | 解除绑定，保留该 Tab 的本会话表情 |
+| 关闭 Tab | 清理该 Tab 的绑定与表情 |
+| 新建、复制或关闭后重新打开 Tab | 默认不启用规则，表情为 `🐨` |
+| 浏览器重启，或扩展禁用、重新加载、更新 | 会话状态重置，需要重新选择规则与表情 |
+
+规则列表单独保存在本地，正常重新加载或更新同一扩展时保留。卸载扩展会清除本地规则，升级时不要先卸载。[Chrome Storage 说明](https://developer.chrome.com/docs/extensions/reference/api/storage)
+
+## 使用范围与数据
+
+规则覆盖**当前 Tab 可关联的所有请求域名**，包括第三方地址；会设置你配置的字段，同名字段被覆盖，其余请求头保留。范围包括主页面、子框架、跨域接口、脚本、图片、样式、字体和 WebSocket 握手等。
+
+这意味着配置的请求头也可能发送给页面加载的第三方服务。适合用于测试 lane；不要在这种全域规则中填写只应发送给某一个站点的密钥。
+
+- 按 Tab 改请求头**不隔离 Cookie、站点缓存或登录状态**，这些仍由同一浏览器 Profile 共享。
+- Chrome 内置页面、扩展页面和 Chrome Web Store 不能启用。没有关联 Tab 的后台请求也无法按 Tab 分流。
+- 规则作用于之后发出的请求，不会重发已有请求、改变已建立的连接或重写缓存内容。Service Worker 自行生成或从 CacheStorage 返回的响应可能不经过网络栈；HTTP 缓存并非一概绕过规则。具体边界见 [Chrome DNR 文档](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)。
+- 规则存于 `storage.local`；绑定、表情和恢复日志存于 `storage.session`。本项目不使用云同步，规则未加密。请求头内容仅供扩展自己的可信页面读取，内容脚本只接收所属 Tab 的显示简称和表情。
+- 扩展无远程脚本、CDN 依赖或分析上报，不代理或上传响应内容；**按规则发送请求头是它的核心功能**，本地保存不代表请求头值不会传给目标服务器。
+
+## 常见问题
+
+### 已经启用，为什么看起来没变化？
+
+先确认当前 Tab 的开关已启用，再刷新页面，在浏览器开发者工具的 Network 面板查看**新请求**。已完成的请求不会重发；受限页面、无 Tab 的后台请求和部分 Service Worker 缓存响应不在适用范围内。若同时使用其他改请求头扩展，结果还可能受到 [Chrome 规则优先级](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#rule-evaluation) 影响。
+
+### 为什么另一个 Tab 的请求头内容也变了？
+
+两个 Tab 使用了同一条规则。编辑规则会同步所有使用者；要保持内容不同，分别创建规则。单纯切换或停用某个 Tab 的开关不会切换其他 Tab。
+
+### 怎么升级而不丢规则？
+
+下载新安装包，用新版扩展文件替换原安装目录中的文件，再到 `chrome://extensions` 对**原扩展**点击「重新加载」。保持安装目录和扩展条目不变，不要先卸载。规则列表保留，Tab 绑定与表情需要重新设置。
+
+### 看到「状态同步失败」怎么办？
+
+v1.0.1 修复了关闭 Tab 与导航完成事件交错时的误报：忽略已关闭 Tab 的角标更新错误，同时继续清理绑定，其他异常仍会报告。
+
+先升级或重新加载扩展，清除错误页中的旧记录后观察。如果仍反复出现，请在 [Issues](https://github.com/JackYuanzzz/kaola-header-switcher/issues) 提供版本、复现步骤和包含来源/阶段/类别的新错误提示；不要上传真实请求头内容或业务截图。诊断日志不记录请求头值或网页 URL。
+
+## 开发
+
+这是一个独立 pnpm 项目。需要 Node.js 22+、pnpm 9.15.0；仅下载安装包的用户不需要这些工具。
 
 ```sh
 git clone https://github.com/JackYuanzzz/kaola-header-switcher.git
@@ -15,42 +129,9 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-构建后会在仓库根目录生成可加载的 `dist/`。`dist/` 和 ZIP 不进入 Git，因此不能直接把 GitHub 下载的源码 ZIP 当作扩展安装。
-
-1. Chrome 地址栏打开 `chrome://extensions`。
-2. 打开右上角「开发者模式」，点击「加载已解压的扩展程序」。
-3. 选择本仓库的 `dist/` 目录（不是其父目录，也不是 ZIP 文件）。
-4. 在浏览器工具栏的扩展菜单中固定「有问题找kaola」（考拉图标）。
-5. 打开需要联调的网页，点击扩展，新增规则：最少只需在「请求头内容」填写 `doc-20260910`，请求头名称会默认为 `x-lane`。也可以另外填写规则名称「文档联调」与简称 `DOC`。
-6. 保存并启用到当前 Tab。首次 HTML 和已经加载的资源不会重发，需要时手动刷新页面。
-
-最低支持 Chrome 110。Edge 等 Chromium 浏览器可尝试同样的开发者模式安装流程，但本项目的自动化验收使用 Chromium。
-
-## 使用语义
-
-- **一个 Tab 一条规则**：启用另一条会替换该 Tab 原来的规则。不同 Tab 互不影响。
-- **最少只填请求头内容**：每行内容都必须有值，不能留空或只填空白。请求头名称留空时默认为 `x-lane`，重复字段仍会报错。规则名称和长度不限的规则简称可以留空；显示时自动取第一条非空请求头内容，之后修改内容时自动跟随。留空的名称与简称以空字符串保存，不会把自动显示值写死。
-- **覆盖该 Tab 的所有可关联网络请求**：不限制请求域名，包括跨域接口、主页面、子框架、脚本、图片、样式、字体及 WebSocket 握手等。仅设置你配置的字段，其他请求头保留。非空请求头内容原样保存；派生的标题文案会合并多余空白，避免页面标题前缀重复。
-- **局部停用**：停用仅移除当前 Tab 的修改，之后请求恢复网页自身提供的请求头。
-- **共享规则编辑**：保存修改会更新所有正在使用该规则的 Tab；删除规则会解除这些 Tab 的绑定。
-- **目录直接删除**：每条规则旁可直接点击「删除」，二次确认后才移除。删除其他规则会保留当前编辑区的未保存内容；若正在删除的规则有未保存修改，会先提示这些修改也将一并丢弃。
-- **完整简称与醒目标识**：规则简称完整保存，网页标题使用 `🐨[完整简称] 原标题`，例如 `🐨[文档联调-20260910] 编辑器`。考拉和左方括号之间没有空格。仅工具栏角标受显示空间限制，显示简称的前 4 个可见字符（按字素分段，不拆开组合 emoji）。网页自己更新标题时保留完整前缀，停用后恢复原标题。
-- **每个 Tab 自选标题表情**：在弹窗顶部的「标题表情」中填写一个表情，再点「保存表情」，标题会使用 `🦊[完整简称] 原标题` 等自选前缀。支持 `👩🏽‍💻` 这样的组合表情，留空保存恢复默认 `🐨`。表情只属于当前 Tab，即使两个 Tab 使用同一条规则也能选不同表情；不影响工具栏角标。未启用规则时也能先保存表情，停用规则后仍保留，重新启用时继续使用。保存表情不会丢失规则编辑区的未保存修改。
-- **会话生命周期**：刷新、普通页面导航和扩展后台休眠保留 Tab 绑定及标题表情。关闭 Tab 自动清理。新建、复制 Tab 默认不继承规则，标题表情默认为 `🐨`。浏览器完全退出、扩展重新加载 / 更新后，需要重新选择 Tab 规则与标题表情；已保存规则仍然保留。
-
-名称或简称留空会把请求头内容显示在目录或标签标题中；涉及敏感内容时，请显式填写不含敏感信息的规则名称和简称。
-
-Chrome 内置页面、扩展页面、Chrome Web Store 不能启用。网页 Service Worker 的 CacheStorage 响应不经过网络，且没有关联 Tab 的后台请求无法按 Tab 分流。规则只作用于之后发出的请求，不能更改正在进行的请求、已建立的连接或网页缓存内容。不同 lane 共用同一浏览器 Profile 的 Cookie、站点缓存和登录状态；按 Tab 改头不会隔离这些数据。与其他改请求头扩展同时启用时，最终结果还受到 Chrome 的规则优先级影响。
-
-规则不限制域名，因此配置的头也会发往当前 Tab 请求的第三方地址。此工具适合测试 lane；不要在全域规则中填写只应发送给某一个站点的密钥。
-
-## 本地开发
-
-这是一个独立 pnpm 项目，有自己的 workspace、依赖和 lockfile。Node.js 22+，pnpm 9.15.0。在仓库根目录执行：
+源码构建后，在 `chrome://extensions` 加载仓库的 `dist/` 目录。修改源码后重新构建，再点击扩展的「重新加载」。`dist/` 和安装 ZIP 不提交到 Git；GitHub 的源码下载包需要先构建。
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm build
 pnpm test
 pnpm typecheck:e2e
 pnpm exec playwright install chromium
@@ -58,24 +139,23 @@ pnpm test:e2e
 pnpm package
 ```
 
-修改源码后重新构建，再在 `chrome://extensions` 点击扩展的重新加载按钮。`pnpm package` 在插件目录生成 `lane-header-switcher-1.0.1.zip`，解压后按上述步骤加载。构建产物不包含设计原型、测试或依赖。
+`pnpm package` 会生成 `lane-header-switcher-1.0.1.zip`，ZIP 根目录直接包含 `manifest.json`，不含测试、设计原型或开发依赖。测试覆盖真实 Chromium 扩展加载、同网址多 Tab 请求隔离、共享规则修改、草稿保护、表情与标题、生命周期及状态同步异常；使用独立临时浏览器配置，不读取日常浏览器 Profile。
 
-### 1.0.1 状态同步修复
+### 实现与权限
 
-关闭标签页与导航完成事件可能交错，旧版会将已关闭标签页的角标更新失败误报为「状态同步失败」。新版仅忽略对应标签页的原生 `No tab with id` 错误，仍完成绑定清理，并保留同批次其他异常。真正的失败会显示事件来源、初始化/执行阶段和错误类别，不记录请求头内容或网页 URL。
+严格 TypeScript、原生 DOM、Rough.js，使用 esbuild 本地打包。核心入口为 [后台消息](src/background.ts)、[状态引擎](src/engine.ts)、[规则校验](src/rules.ts)、[标题标记](src/content.ts) 和 [弹窗交互](src/popup.ts)。
 
-升级时重新加载 `dist/` 即可，无需卸载扩展或清空规则。错误页中的旧历史记录可手动清除后再观察；如果新版仍重复报错，请提供包含来源与类别的新提示。
+| 权限 | 用途 |
+| --- | --- |
+| `declarativeNetRequestWithHostAccess`、`<all_urls>` | 由 Chrome 执行 `modifyHeaders` 会话规则，以 `tabIds` 限定目标 Tab |
+| `storage` | 本地规则、会话绑定、独立表情和中断恢复日志 |
+| `tabs` | 定位当前 Tab，读取标题/URL，监听导航、关闭与替换 |
+| `scripting` | 添加或恢复标题标记，支持安装前已经打开的网页 |
 
-## 实现与权限
+后台串行处理写操作，原子替换网络规则；持久化失败时回滚，并通过会话日志处理后台中断后的恢复。
 
-- 严格 TypeScript + 原生 DOM，Rough.js 与扩展一起由 esbuild 本地打包；无远程脚本、CDN 请求或分析上报。
-- `declarativeNetRequestWithHostAccess` + `<all_urls>`：由 Chrome 原生 `modifyHeaders` 会话规则执行请求头修改，`tabIds` 限定到当前 Tab；不代理、读取或上传响应内容。
-- `storage`：规则保存在 `storage.local`，Tab 绑定、标题表情与中断恢复日志在 `storage.session`。请求头内容只允许扩展自己的可信页面读取；内容脚本只能读取所属 Tab 的规则简称和标题表情。规则未加密，不同步到云端。
-- `tabs`：读取当前网页标题 / URL、定位 Tab、监听关闭与替换。`scripting` 和内容脚本用于添加 / 恢复标签标题前缀，并支持扩展安装前已打开的网页。
-- 所有写操作在后台串行执行；DNR 原子替换，持久化失败回滚，Service Worker 重启时从会话日志恢复。
+## 参考与致谢
 
-核心入口：`src/background.ts`（消息与生命周期）、`src/engine.ts`（状态同步）、`src/rules.ts`（校验与规则编译）、`src/content.ts`（Tab 标题）、`src/popup.ts`（交互）。
+技术参考：[Chrome DNR](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[工具栏角标](https://developer.chrome.com/docs/extensions/reference/api/action)、[Chrome Storage](https://developer.chrome.com/docs/extensions/reference/api/storage)。
 
-测试包括真实 Chromium 扩展加载与本地 HTTP 回显、相同 URL 多 Tab 隔离、主页面 / 子资源 / 跨域请求、多请求头、共享规则更新、目录删除确认与草稿保留、超长 / emoji 简称、每个 Tab 独立标题表情、手绘 SVG 与图标加载，以及状态写入失败、Worker 重启恢复和扩展重载后的标题清理。测试使用独立的临时浏览器配置，不读取日常浏览器 Profile。最新弹窗截图生成在 `artifacts/sketch-popup.png`。
-
-参考：[Chrome DNR](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[Action 角标](https://developer.chrome.com/docs/extensions/reference/api/action)、[Storage](https://developer.chrome.com/docs/extensions/reference/api/storage)、[Rough.js](https://roughjs.com/)。视觉设计使用 [huashu-design](https://github.com/alchaincyf/huashu-design)，早期方案原型在 `design-demos/` 中保留。
+手绘界面由 [Rough.js](https://github.com/rough-stuff/rough) 绘制。视觉与 README 整理由 [huashu-design](https://github.com/alchaincyf/huashu-design) 的设计流程辅助，沿用考拉、暖纸和手绘方向；早期原型保留在 [design-demos](design-demos/)，当前界面以本文演示截图为准。
