@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const manifest = JSON.parse(await readFile(new URL('../dist/manifest.json', import.meta.url), 'utf8'));
 if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('扩展版本号格式无效。');
-const archive = `lane-header-switcher-${manifest.version}.zip`;
+const archive = `kaola-header-switcher-${manifest.version}.zip`;
 
 // -FS synchronizes this named archive with these exact build outputs, dropping stale entries.
 execFileSync('zip', [

@@ -1,6 +1,6 @@
 {
-  "name": "lane-header-switcher",
-  "version": "1.0.1",
+  "name": "kaola-header-switcher",
+  "version": "1.0.2",
   "private": true,
   "description": "有问题找kaola：按标签页切换请求头的手绘风 Chrome 扩展",
   "type": "module",

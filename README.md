@@ -5,7 +5,7 @@
 <h1 align="center">有问题找kaola</h1>
 
 <p align="center">同一个域名，多个 Tab，各用各的请求头。</p>
-<p align="center">v1.0.1 · Chrome 110 及以上 · 本地浏览器扩展</p>
+<p align="center">v1.0.2 · Chrome 110 及以上 · 本地浏览器扩展</p>
 
 <p align="center">
   <a href="https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest"><strong>下载已打包的插件</strong></a>
@@ -27,7 +27,7 @@
 
 **日常使用不需要 Node.js，也不需要自己构建。**
 
-1. 打开 [GitHub Releases 下载页](https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest)，在 **Assets** 中下载 [lane-header-switcher-1.0.1.zip](https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.1/lane-header-switcher-1.0.1.zip)。不要选择 GitHub 自动生成的 `Source code`，它是源码，不是可安装的插件。
+1. 打开 [GitHub Releases 下载页](https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest)，在 **Assets** 中下载 [kaola-header-switcher-1.0.2.zip](https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.2/kaola-header-switcher-1.0.2.zip)。不要选择 GitHub 自动生成的 `Source code`，它是源码，不是可安装的插件。
 2. 将 ZIP 解压到一个固定目录，安装后保留该目录，不要放在会自动清理的位置。
 3. 在 Chrome 地址栏输入 `chrome://extensions`，打开右上角「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择**直接包含 `manifest.json` 的目录**，不是 ZIP 文件，也不是它的父目录。
@@ -114,7 +114,7 @@
 
 ### 看到「状态同步失败」怎么办？
 
-v1.0.1 修复了关闭 Tab 与导航完成事件交错时的误报：忽略已关闭 Tab 的角标更新错误，同时继续清理绑定，其他异常仍会报告。
+从 v1.0.1 起，已修复关闭 Tab 与导航完成事件交错时的误报：忽略已关闭 Tab 的角标更新错误，同时继续清理绑定，其他异常仍会报告。
 
 先升级或重新加载扩展，清除错误页中的旧记录后观察。如果仍反复出现，请在 [Issues](https://github.com/JackYuanzzz/kaola-header-switcher/issues) 提供版本、复现步骤和包含来源/阶段/类别的新错误提示；不要上传真实请求头内容或业务截图。诊断日志不记录请求头值或网页 URL。
 
@@ -139,7 +139,7 @@ pnpm test:e2e
 pnpm package
 ```
 
-`pnpm package` 会生成 `lane-header-switcher-1.0.1.zip`，ZIP 根目录直接包含 `manifest.json`，不含测试、设计原型或开发依赖。测试覆盖真实 Chromium 扩展加载、同网址多 Tab 请求隔离、共享规则修改、草稿保护、表情与标题、生命周期及状态同步异常；使用独立临时浏览器配置，不读取日常浏览器 Profile。
+`pnpm package` 会生成 `kaola-header-switcher-1.0.2.zip`，ZIP 根目录直接包含 `manifest.json`，不含测试、文档素材或开发依赖。测试覆盖真实 Chromium 扩展加载、同网址多 Tab 请求隔离、共享规则修改、草稿保护、表情与标题、生命周期及状态同步异常；使用独立临时浏览器配置，不读取日常浏览器 Profile。
 
 ### 实现与权限
 
@@ -158,4 +158,4 @@ pnpm package
 
 技术参考：[Chrome DNR](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[工具栏角标](https://developer.chrome.com/docs/extensions/reference/api/action)、[Chrome Storage](https://developer.chrome.com/docs/extensions/reference/api/storage)。
 
-手绘界面由 [Rough.js](https://github.com/rough-stuff/rough) 绘制。视觉与 README 整理由 [huashu-design](https://github.com/alchaincyf/huashu-design) 的设计流程辅助，沿用考拉、暖纸和手绘方向；早期原型保留在 [design-demos](design-demos/)，当前界面以本文演示截图为准。
+手绘界面由 [Rough.js](https://github.com/rough-stuff/rough) 绘制。视觉与 README 整理由 [huashu-design](https://github.com/alchaincyf/huashu-design) 的设计流程辅助，沿用考拉、暖纸和手绘方向；当前界面以本文演示截图为准。
