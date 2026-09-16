@@ -30,6 +30,7 @@ export interface PopupState {
 export type RequestMessage =
     | { type: 'GET_STATE'; tabId: number }
     | { type: 'SAVE_RULE'; tabId: number; rule: LaneRule }
+    | { type: 'REORDER_RULES'; tabId: number; ruleIds: string[] }
     | { type: 'DELETE_RULE'; tabId: number; ruleId: string }
     | { type: 'APPLY_RULE'; tabId: number; ruleId: string | null }
     | { type: 'SET_TAB_EMOJI'; tabId: number; emoji: string }

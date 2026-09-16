@@ -37,6 +37,7 @@ let confirmation: HTMLElement | null = null;
 let formError: HTMLElement | null = null;
 let draftStatus: HTMLElement | null = null;
 let emojiBaseline = tabEmojiInput.value;
+let draggingRuleId: string | null = null;
 
 function dirty(): boolean {
     return draft !== null && JSON.stringify(draft) !== baseline;
@@ -137,6 +138,7 @@ function updateEditorContext(): void {
 
 function renderRules(): void {
     if (!state) return;
+    draggingRuleId = null;
     ruleList.replaceChildren();
     byId('ruleCount').textContent = `${state.rules.length} 条`;
     byId('listEmpty').hidden = state.rules.length > 0;
@@ -146,6 +148,7 @@ function renderRules(): void {
         const selected = draft?.id === rule.id;
         const item = node('li', `rule${active ? ' active' : ''}`);
         item.dataset.sketch = 'rule';
+        item.dataset.ruleId = rule.id;
         const top = node('div', 'rule-top');
         const nameText = displayRuleName(rule);
         const codeText = displayRuleShortName(rule);
@@ -167,10 +170,71 @@ function renderRules(): void {
         const remove = button('删除', 'text-btn danger', () => requestDeleteRule(rule.id));
         remove.setAttribute('aria-label', `删除「${nameText}」`);
         actions.append(remove);
+        const handle = button('⠿', 'drag-handle', () => {});
+        handle.draggable = true;
+        handle.setAttribute('aria-label', `拖动排序「${nameText}」`);
+        handle.title = '拖动调整顺序；聚焦后按上下方向键也可排序';
+        handle.addEventListener('dragstart', (event) => {
+            if (busy || !event.dataTransfer) { event.preventDefault(); return; }
+            draggingRuleId = rule.id;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', rule.id);
+            item.classList.add('dragging');
+        });
+        handle.addEventListener('dragend', clearDragIndicators);
+        handle.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            if (!state || busy) return;
+            const ids = state.rules.map(entry => entry.id);
+            const from = ids.indexOf(rule.id);
+            const to = from + (event.key === 'ArrowUp' ? -1 : 1);
+            if (to < 0 || to >= ids.length) return;
+            [ids[from], ids[to]] = [ids[to]!, ids[from]!];
+            void reorderRules(ids, rule.id);
+        });
+        actions.append(handle);
+        item.addEventListener('dragover', (event) => {
+            if (!draggingRuleId || draggingRuleId === rule.id || busy) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+            ruleList.querySelectorAll('.drop-before, .drop-after').forEach(element => element.classList.remove('drop-before', 'drop-after'));
+            item.classList.add(event.clientY < item.getBoundingClientRect().top + item.offsetHeight / 2 ? 'drop-before' : 'drop-after');
+        });
+        item.addEventListener('drop', (event) => {
+            if (!draggingRuleId || draggingRuleId === rule.id || !state || busy) return;
+            event.preventDefault();
+            const draggedId = draggingRuleId;
+            const after = event.clientY >= item.getBoundingClientRect().top + item.offsetHeight / 2;
+            clearDragIndicators();
+            const ids = state.rules.map(entry => entry.id).filter(id => id !== draggedId);
+            ids.splice(ids.indexOf(rule.id) + Number(after), 0, draggedId);
+            void reorderRules(ids);
+        });
         item.append(top, node('p', 'rule-meta', `${rule.headers.length} 个请求头 · ${used}`), actions);
         ruleList.append(item);
     }
     redrawSketches();
+}
+
+function clearDragIndicators(): void {
+    draggingRuleId = null;
+    ruleList.querySelectorAll('.dragging, .drop-before, .drop-after').forEach(element => {
+        element.classList.remove('dragging', 'drop-before', 'drop-after');
+    });
+}
+
+async function reorderRules(ruleIds: string[], focusRuleId?: string): Promise<void> {
+    if (tabId === null || busy) return;
+    await mutation(async () => {
+        acceptState(await send({ type: 'REORDER_RULES', tabId: tabId!, ruleIds }));
+        if (focusRuleId) {
+            const handle = [...ruleList.querySelectorAll<HTMLButtonElement>('.drag-handle')]
+                .find(element => element.closest<HTMLElement>('.rule')?.dataset.ruleId === focusRuleId);
+            handle?.focus();
+        }
+        status('规则目录顺序已保存。', 'success');
+    }, '正在保存规则目录顺序…', false);
 }
 
 function clearConfirmation(): void {

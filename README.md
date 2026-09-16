@@ -5,7 +5,7 @@
 <h1 align="center">有问题找kaola</h1>
 
 <p align="center">同一个域名，多个 Tab，各用各的请求头。</p>
-<p align="center">v1.0.2 · Chrome 110 及以上 · 本地浏览器扩展</p>
+<p align="center">v1.0.3 · Chrome 110 及以上 · 本地浏览器扩展</p>
 
 <p align="center">
   <a href="https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest"><strong>下载已打包的插件</strong></a>
@@ -28,7 +28,7 @@
 
 **日常使用不需要 Node.js，也不需要自己构建。**
 
-1. 打开 [GitHub Releases 下载页](https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest)，在 **Assets** 中下载 [kaola-header-switcher-1.0.2.zip](https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.2/kaola-header-switcher-1.0.2.zip)。不要选择 GitHub 自动生成的 `Source code`，它是源码，不是可安装的插件。
+1. 打开 [GitHub Releases 下载页](https://github.com/JackYuanzzz/kaola-header-switcher/releases/latest)，在 **Assets** 中下载 [kaola-header-switcher-1.0.3.zip](https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.3/kaola-header-switcher-1.0.3.zip)。不要选择 GitHub 自动生成的 `Source code`，它是源码，不是可安装的插件。
 2. 将 ZIP 解压到一个固定目录，安装后保留该目录，不要放在会自动清理的位置。
 3. 在 Chrome 地址栏输入 `chrome://extensions`，打开右上角「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择**直接包含 `manifest.json` 的目录**，不是 ZIP 文件，也不是它的父目录。
@@ -42,15 +42,15 @@
 
 适用于 **macOS / Linux 的首次安装**。将下面整段命令交给 Agent 或粘贴到终端：只需 `curl`、`unzip` 和系统自带的 `shasum` / `sha256sum`，不需要 Node.js、pnpm、Git 或 GitHub CLI，也不执行远程脚本。
 
-命令下载固定版本 v1.0.2，校验 SHA-256 后解压至 `~/.local/share/kaola-header-switcher`。目标路径已存在（包括符号链接）时立即停止，不覆盖旧文件；已有安装请按[升级说明](#怎么升级而不丢规则)沿用原目录。
+命令下载固定版本 v1.0.3，校验 SHA-256 后解压至 `~/.local/share/kaola-header-switcher`。目标路径已存在（包括符号链接）时立即停止，不覆盖旧文件；已有安装请按[升级说明](#怎么升级而不丢规则)沿用原目录。
 
 ```sh
 sh <<'KAOLA_INSTALL'
 set -eu
 : "${HOME:?未设置 HOME，请停止并检查当前用户环境}"
 kaola_dir="$HOME/.local/share/kaola-header-switcher"
-kaola_url='https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.2/kaola-header-switcher-1.0.2.zip'
-kaola_sha256='30c097afa39e8c21249b0a99348d008c33d365a0d913a8acc76857f76e7e7b19'
+kaola_url='https://github.com/JackYuanzzz/kaola-header-switcher/releases/download/v1.0.3/kaola-header-switcher-1.0.3.zip'
+kaola_sha256='734a2095876753fb9249b4e465549d2d82b8282966bd0c42bf4bc50a17a06814'
 
 for kaola_cmd in curl unzip mktemp; do
   command -v "$kaola_cmd" >/dev/null 2>&1 || {
@@ -120,6 +120,8 @@ macOS 选择文件夹时，可按 `⌘⇧G` 粘贴命令输出的完整路径，
 
 再打开同一个网址，在第二个 Tab 选择另一条规则，即可同时调试两个环境。一个 Tab 同时启用一条规则，切换开关只影响当前 Tab。
 
+旧版本保存的规则在首次升级后会按新到旧排列，此后新建规则会出现在目录最上方。可拖动每条规则的「⠿」手柄调整顺序；聚焦手柄后也可按 ↑ / ↓ 排序。顺序会保存在本地，编辑已有规则不会改变它的位置，排序也不会切换当前 Tab 正在使用的规则。
+
 ### 字段怎么填
 
 | 字段 | 是否必填 | 留空时的行为 |
@@ -184,7 +186,24 @@ macOS 选择文件夹时，可按 `⌘⇧G` 粘贴命令输出的完整路径，
 
 ### 怎么升级而不丢规则？
 
-下载新安装包，用新版扩展文件替换原安装目录中的文件，再到 `chrome://extensions` 对**原扩展**点击「重新加载」。保持安装目录和扩展条目不变，不要先卸载。规则列表保留，Tab 绑定与表情需要重新设置。
+从包含 `update.sh` 的版本起，可以用原安装目录中的脚本更新：
+
+```sh
+sh /原安装目录/update.sh --version 新版本号 --sha256 发布说明中的SHA256
+```
+
+脚本仅下载 GitHub Release 的对应版本（或用 `--archive 本地ZIP` 指定本地包），先校验 SHA-256、ZIP 内容和版本，再在**原路径**替换扩展文件，并在安装目录旁保留旧文件备份。可先加 `--dry-run` 预检；若脚本不在原安装目录，另加 `--install-dir 原安装目录`。它只处理指定安装目录及相邻备份，不读取或改写 Chrome 保存的规则数据，也不会卸载扩展。更新文件后，仍须到 `chrome://extensions` 对**原扩展**点击「重新加载」；规则列表保留，Tab 绑定与表情需要重新设置。不要将新目录作为另一条扩展安装。
+
+1.0.1 / 1.0.2 的安装包尚无 `update.sh`。首次升级时，下载并校验上方的 1.0.3 ZIP，解压到临时目录，然后运行其中的脚本：
+
+```sh
+sh /新包解压目录/update.sh \
+  --install-dir /原扩展安装目录 \
+  --archive /下载位置/kaola-header-switcher-1.0.3.zip \
+  --sha256 734a2095876753fb9249b4e465549d2d82b8282966bd0c42bf4bc50a17a06814
+```
+
+先加 `--dry-run` 可以只做预检。运行成功后重新加载**原扩展**，以后更新即可直接使用原安装目录内的 `update.sh`；不要先卸载。
 
 ### 看到「状态同步失败」怎么办？
 
@@ -213,7 +232,7 @@ pnpm test:e2e
 pnpm package
 ```
 
-`pnpm package` 会生成 `kaola-header-switcher-1.0.2.zip`，ZIP 根目录直接包含 `manifest.json`，不含测试、文档素材或开发依赖。测试覆盖真实 Chromium 扩展加载、同网址多 Tab 请求隔离、共享规则修改、草稿保护、表情与标题、生命周期及状态同步异常；使用独立临时浏览器配置，不读取日常浏览器 Profile。
+`pnpm package` 会生成 `kaola-header-switcher-1.0.3.zip`，ZIP 根目录直接包含 `manifest.json` 和 `update.sh`，不含测试、文档素材或开发依赖。测试覆盖真实 Chromium 扩展加载、同网址多 Tab 请求隔离、共享规则修改、目录排序、草稿保护、表情与标题、生命周期及状态同步异常；使用独立临时浏览器配置，不读取日常浏览器 Profile。
 
 ### 实现与权限
 

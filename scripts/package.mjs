@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const manifest = JSON.parse(await readFile(new URL('../dist/manifest.json', import.meta.url), 'utf8'));
@@ -9,7 +10,8 @@ const archive = `kaola-header-switcher-${manifest.version}.zip`;
 // -FS synchronizes this named archive with these exact build outputs, dropping stale entries.
 execFileSync('zip', [
   '-q', '-FS', `../${archive}`,
-  'manifest.json', 'background.js', 'popup.js', 'content.js', 'popup.html', 'popup.css', 'LICENSES.txt',
+  'manifest.json', 'background.js', 'popup.js', 'content.js', 'popup.html', 'popup.css', 'LICENSES.txt', 'update.sh',
   'icons/icon-16.png', 'icons/icon-32.png', 'icons/icon-48.png', 'icons/icon-128.png',
 ], { cwd: fileURLToPath(new URL('../dist/', import.meta.url)), stdio: 'inherit' });
 console.log(`安装包已生成：${fileURLToPath(new URL(`../${archive}`, import.meta.url))}`);
+console.log(`SHA-256：${createHash('sha256').update(await readFile(new URL(`../${archive}`, import.meta.url))).digest('hex')}`);

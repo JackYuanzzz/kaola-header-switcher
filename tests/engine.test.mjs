@@ -64,6 +64,58 @@ test('validation canonicalizes header names and preserves nonempty header conten
     assert.deepEqual(parsed.headers, [{ name: 'x-lane', value: ' padded ' }, { name: 'x-extra', value: 'second' }]);
 });
 
+test('new rules appear first; reordering persists without rebuilding network rules', async () => {
+    const fake = fakeChrome();
+    const engine = new LaneEngine(fake.api);
+    await engine.initialize();
+    await engine.saveRule(rule('first', 'first-lane'));
+    await engine.saveRule(rule('second', 'second-lane'));
+    await engine.saveRule(rule('third', 'third-lane'));
+    assert.deepEqual((await engine.snapshot(1)).rules.map(item => item.id), ['third', 'second', 'first']);
+    await engine.saveRule(rule('second', 'updated-lane'));
+    assert.deepEqual((await engine.snapshot(1)).rules.map(item => item.id), ['third', 'second', 'first']);
+    await engine.applyRule(1, 'second');
+    const networkBefore = structuredClone(fake.network());
+    fake.rejectNextDnr();
+    await engine.reorderRules(['first', 'third', 'second']);
+    assert.deepEqual(fake.local.rules.map(item => item.id), ['first', 'third', 'second']);
+    assert.deepEqual(fake.network(), networkBefore);
+    assert.equal((await engine.snapshot(1)).activeRuleId, 'second');
+    const recovered = new LaneEngine(fake.api);
+    // The next initialization rebuilds DNR; the reject flag above proves reorder did not.
+    await assert.rejects(recovered.initialize(), /Rejected rule/);
+    await recovered.initialize();
+    assert.deepEqual((await recovered.snapshot(1)).rules.map(item => item.id), ['first', 'third', 'second']);
+});
+
+test('legacy oldest-first lists migrate once without reversing a saved custom order', async () => {
+    const fake = fakeChrome();
+    fake.local.rules = [rule('oldest'), rule('middle'), rule('newest')];
+    const first = new LaneEngine(fake.api);
+    await first.initialize();
+    assert.deepEqual((await first.snapshot(1)).rules.map(item => item.id), ['newest', 'middle', 'oldest']);
+    assert.equal(fake.local.rulesOrderVersion, 1);
+    await first.reorderRules(['middle', 'oldest', 'newest']);
+    const recovered = new LaneEngine(fake.api);
+    await recovered.initialize();
+    assert.deepEqual((await recovered.snapshot(1)).rules.map(item => item.id), ['middle', 'oldest', 'newest']);
+});
+
+test('reorder rejects stale or invalid lists and leaves state unchanged on storage failure', async () => {
+    const fake = fakeChrome();
+    const engine = new LaneEngine(fake.api);
+    await engine.initialize();
+    await engine.saveRule(rule('first'));
+    await engine.saveRule(rule('second'));
+    for (const ids of [['second'], ['first', 'first'], ['first', 'missing'], 'first,second']) {
+        await assert.rejects(engine.reorderRules(ids), /刷新后重试排序/);
+    }
+    fake.rejectNextLocal();
+    await assert.rejects(engine.reorderRules(['first', 'second']), /Disk full/);
+    assert.deepEqual((await engine.snapshot(1)).rules.map(item => item.id), ['second', 'first']);
+    assert.deepEqual(fake.local.rules.map(item => item.id), ['second', 'first']);
+});
+
 test('only header content is required; blank header names default to x-lane', () => {
     const parsed = validateRule({ ...rule(), name: '', shortName: '', headers: [{ name: '   ', value: '  lane-default  ' }] });
     assert.equal(parsed.name, '');

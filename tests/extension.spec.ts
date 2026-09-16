@@ -553,6 +553,36 @@ test('list deletion can be cancelled and confirmed deletion clears every tab usi
     expect(pageErrors).toEqual([]);
 });
 
+test('rule directory starts newest-first and supports persisted drag and keyboard ordering', async ({ extension, echo }) => {
+    const target = await openTab(extension, echo);
+    const first = makeRule('规则一', 'ONE', 'lane-one');
+    const second = makeRule('规则二', 'TWO', 'lane-two');
+    const third = makeRule('规则三', 'THREE', 'lane-three');
+    for (const rule of [first, second, third]) await save(extension, target.id, rule);
+    await apply(extension, target.id, second.id);
+    const popup = await openPopup(extension, target.page);
+    const names = () => popup.locator('.rule-name').allTextContents();
+    await expect.poll(names).toEqual([third.name, second.name, first.name]);
+
+    // Reordering the directory must not discard an unsaved editor draft or change the active lane.
+    await popup.getByRole('listitem').filter({ has: popup.getByRole('button', { name: `删除「${third.name}」` }) })
+        .getByRole('button', { name: '编辑', exact: true }).click();
+    await popup.getByLabel('规则名称', { exact: true }).fill('未保存的草稿');
+    const secondHandle = popup.getByRole('button', { name: `拖动排序「${second.name}」` });
+    await secondHandle.dragTo(popup.locator('.rule').first(), { targetPosition: { x: 10, y: 5 } });
+    await expect.poll(names).toEqual([second.name, third.name, first.name]);
+    await expect(popup.getByLabel('规则名称', { exact: true })).toHaveValue('未保存的草稿');
+    expect((await extension.state(target.id)).activeRuleId).toBe(second.id);
+    expect((await fetchHeaders(target.page))['x-lane']).toBe('lane-two');
+
+    await popup.getByRole('button', { name: `拖动排序「${third.name}」` }).focus();
+    await popup.keyboard.press('ArrowUp');
+    await expect.poll(names).toEqual([third.name, second.name, first.name]);
+    await popup.reload();
+    await expect.poll(names).toEqual([third.name, second.name, first.name]);
+    expect((await extension.state(target.id)).rules.map(rule => rule.id)).toEqual([third.id, second.id, first.id]);
+});
+
 test('list deletion preserves other dirty drafts and warns before discarding the deleted rule draft', async ({ extension, echo }) => {
     const target = await openTab(extension, echo);
     const edited = makeRule('正在编辑的规则', 'EDIT', 'saved-lane');
@@ -562,6 +592,8 @@ test('list deletion preserves other dirty drafts and warns before discarding the
     const popup = await openPopup(extension, target.page);
     const pageErrors: string[] = [];
     popup.on('pageerror', (error) => pageErrors.push(error.message));
+    await popup.getByRole('listitem').filter({ has: popup.getByRole('button', { name: `删除「${edited.name}」`, exact: true }) })
+        .getByRole('button', { name: '编辑', exact: true }).click();
     const nameInput = popup.getByLabel('规则名称', { exact: true });
     const valueInput = popup.getByLabel('请求头内容 1', { exact: true });
     await expect(nameInput).toHaveValue(edited.name);

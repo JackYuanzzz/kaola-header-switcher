@@ -47,6 +47,7 @@ await Promise.all([
   ...['manifest.json', 'popup.html', 'popup.css'].map((file) =>
     copyFile(new URL(`../public/${file}`, import.meta.url), new URL(file, dist)),
   ),
+  copyFile(new URL('update.sh', import.meta.url), new URL('update.sh', dist)),
   writeIcons(new URL('icons/', dist)),
   writeFile(new URL('LICENSES.txt', dist), notices.join('\n\n---\n\n')),
 ]);

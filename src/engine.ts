@@ -21,13 +21,13 @@ export class LaneEngine {
         if (this.ready) return;
         await this.api.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
         const [local, session, tabs] = await Promise.all([
-            this.api.storage.local.get('rules'),
+            this.api.storage.local.get(['rules', 'rulesOrderVersion']),
             this.api.storage.session.get(['bindings', 'pending', 'tabEmojis']),
             this.api.tabs.query({}),
         ]);
         // A journal lets a fresh worker finish a transition interrupted between DNR and storage writes.
         const pending = session.pending as Plan | undefined;
-        const rules = readRules(pending ? pending.rules : local.rules);
+        let rules = readRules(pending ? pending.rules : local.rules);
         const tabIds = new Set(tabs.map(tab => tab.id));
         const ruleIds = new Set(rules.filter(rule => rule.headers.every(header => header.value.trim())).map(rule => rule.id));
         const savedBindings = readBindings(pending ? pending.bindings : session.bindings);
@@ -44,6 +44,12 @@ export class LaneEngine {
         if (pending) await this.api.storage.local.set({ rules });
         await this.api.storage.session.set({ bindings, tabEmojis });
         await this.api.storage.session.remove('pending');
+        if (local.rulesOrderVersion !== 1) {
+            // Before manual ordering, saved rules were stored oldest-first.
+            // Migrate once, after journal recovery, so future user-defined order stays intact.
+            rules = [...rules].reverse();
+            await this.api.storage.local.set({ rules, rulesOrderVersion: 1 });
+        }
         this.rules = rules;
         this.bindings = bindings;
         this.tabEmojis = tabEmojis;
@@ -107,8 +113,21 @@ export class LaneEngine {
         if (!exists && this.rules.length >= MAX_RULES) throw new Error(`最多保存 ${MAX_RULES} 条规则。`);
         const rules = exists
             ? this.rules.map(item => item.id === rule.id ? rule : item)
-            : [...this.rules, rule];
+            : [rule, ...this.rules];
         await this.commit({ rules, bindings: this.bindings });
+    }
+
+    async reorderRules(input: unknown): Promise<void> {
+        if (!Array.isArray(input) || input.length !== this.rules.length
+            || new Set(input).size !== input.length
+            || input.some(id => typeof id !== 'string' || !this.rules.some(rule => rule.id === id))) {
+            throw new Error('规则目录已更新，请刷新后重试排序。');
+        }
+        const byId = new Map(this.rules.map(rule => [rule.id, rule]));
+        const rules = (input as string[]).map(id => byId.get(id)!);
+        // Ordering is local presentation state: do not rebuild active network rules or bindings.
+        await this.api.storage.local.set({ rules });
+        this.rules = rules;
     }
 
     async deleteRule(ruleId: string): Promise<void> {

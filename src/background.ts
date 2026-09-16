@@ -31,6 +31,7 @@ chrome.runtime.onMessage.addListener((value: unknown, sender, sendResponse) => {
         switch (message.type) {
             case 'GET_STATE': break;
             case 'SAVE_RULE': await engine.saveRule(message.rule); break;
+            case 'REORDER_RULES': await engine.reorderRules(message.ruleIds); break;
             case 'SET_TAB_EMOJI': await engine.setTabEmoji(tabId, message.emoji); break;
             case 'DELETE_RULE':
                 if (typeof message.ruleId !== 'string') throw new Error('规则 ID 无效。');
