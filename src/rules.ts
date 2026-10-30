@@ -172,7 +172,7 @@ export function compileRules(rules: LaneRule[], bindings: TabBinding[]): chrome.
             },
             condition: {
                 tabIds: [binding.tabId],
-                // Explicit main_frame is essential; omitting resource types excludes it.
+                // Include main_frame explicitly; SSE uses an HTTP resource type and WS/WSS use websocket.
                 resourceTypes: [
                     'main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object',
                     'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket', 'webtransport',

@@ -73,12 +73,15 @@ button, input { -webkit-tap-highlight-color: transparent; }
 .count { padding: 1px 8px; background: var(--yellow); color: var(--ink-soft); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; transform: rotate(3deg); }
 .rule-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 2px; }
 .rule-list { margin: 0; padding: 0; list-style: none; }
-.rule { padding: 12px 9px 11px; margin-bottom: 4px; }
+.rule { padding: 12px 9px 11px; margin-bottom: 4px; cursor: pointer; }
+.rule:focus-visible { outline: 2px dashed var(--coral-dark); outline-offset: -2px; }
 .rule.dragging { opacity: 0.45; }
 .rule.drop-before::before, .rule.drop-after::before { content: ''; position: absolute; left: 7px; right: 7px; height: 3px; background: var(--coral-dark); z-index: 1; pointer-events: none; }
 .rule.drop-before::before { top: 0; }
 .rule.drop-after::before { bottom: 0; }
 .rule.active { background: #e4f1e759; }
+.rule.selected { box-shadow: inset 0 0 0 2px var(--coral-dark); }
+.switching-editor .workspace { pointer-events: none; }
 .rule-top { display: grid; grid-template-columns: 46px minmax(0, 1fr) 40px; gap: 7px; align-items: center; }
 .mini-code { min-width: 0; min-height: 24px; padding: 4px 3px; background: #ede7d9; color: var(--ink-soft); font-size: 12px; font-weight: 800; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px 1px 4px 1px; transform: rotate(-2deg); }
 .rule.active .mini-code { background: var(--mint-dark); color: #fffef7; }
@@ -97,7 +100,7 @@ button, input { -webkit-tap-highlight-color: transparent; }
 .index-note { margin: 10px 5px 7px; color: var(--ink-soft); font-size: 12px; }
 .new-rule { width: 100%; min-height: 37px; flex-shrink: 0; border: 0; background: #f9eabd57; color: var(--ink); font-weight: 750; }
 .new-rule:hover:not(:disabled) { background: #f9eabdc7; }
-.edit-sheet { min-width: 0; min-height: 0; margin: 10px 10px 9px 7px; padding: 6px 12px 10px; background: #fffdf4d9; overflow-y: auto; overflow-x: hidden; border-radius: 4px 1px 5px 2px; }
+.edit-sheet { min-width: 0; min-height: 0; margin: 10px 10px 9px 7px; padding: 6px 12px 10px; background: #fffdf4d9; overflow-y: auto; overflow-x: hidden; border-radius: 4px 1px 5px 2px; transform-origin: top left; }
 .sheet-kicker { margin: 0 0 3px; color: var(--coral-dark); font-size: 12px; font-weight: 800; letter-spacing: 0.07em; }
 .sheet-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 11px; }
 .sheet-title-row h2 { min-width: 0; margin: 0; font: 750 25px/1.25 var(--hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

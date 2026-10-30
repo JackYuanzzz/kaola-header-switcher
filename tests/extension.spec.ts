@@ -1,9 +1,14 @@
 import { chromium, expect, test as base, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import { createServer, type IncomingHttpHeaders, type RequestListener, type Server } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import type { Duplex } from 'node:stream';
+import { createServer as createHttpsServer } from 'node:https';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import type { LaneRule, PopupState, RequestMessage, ResponseMessage } from '../src/types';
 
 interface RecordedRequest {
@@ -50,6 +55,9 @@ const test = base.extend<{ extension: Extension; echo: EchoServer }>({
             } else if (path.startsWith('/echo')) {
                 response.setHeader('Content-Type', 'application/json');
                 response.end(JSON.stringify(request.headers));
+            } else if (path.startsWith('/events')) {
+                response.setHeader('Content-Type', 'text/event-stream');
+                response.end('data: ready\n\n');
             } else if (path.startsWith('/asset.svg')) {
                 response.setHeader('Content-Type', 'image/svg+xml');
                 response.end('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>');
@@ -62,6 +70,17 @@ const test = base.extend<{ extension: Extension; echo: EchoServer }>({
             }
         };
         const servers: Server[] = [createServer(handler), createServer(handler)];
+        const upgradedSockets = new Set<Duplex>();
+        for (const server of servers) server.on('upgrade', (request, socket) => {
+            upgradedSockets.add(socket);
+            socket.on('close', () => upgradedSockets.delete(socket));
+            requests.push({ path: request.url ?? '/', headers: request.headers });
+            const key = request.headers['sec-websocket-key'];
+            if (!key || Array.isArray(key)) { socket.destroy(); return; }
+            const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+            socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+            setTimeout(() => socket.end(Buffer.from([0x88, 0x00])), 100);
+        });
         const origins = await Promise.all(servers.map(async (server) => {
             await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
             const address = server.address();
@@ -71,6 +90,7 @@ const test = base.extend<{ extension: Extension; echo: EchoServer }>({
         try {
             await use({ origin: origins[0]!, crossOrigin: origins[1]!, requests });
         } finally {
+            for (const socket of upgradedSockets) socket.destroy();
             await Promise.all(servers.map(async (server) => {
                 server.closeAllConnections();
                 await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -85,6 +105,7 @@ const test = base.extend<{ extension: Extension; echo: EchoServer }>({
             context = await chromium.launchPersistentContext(profile, {
                 channel: 'chromium',
                 headless: true,
+                ignoreHTTPSErrors: true,
                 viewport: { width: 720, height: 600 },
                 args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
             });
@@ -209,6 +230,73 @@ test('the same URL can use independent lanes across tabs, covering navigation an
     expect((await fetchHeaders(unbound.page))['x-lane']).toBeUndefined();
     expect((await fetchHeaders(unbound.page))['x-debug-user']).toBeUndefined();
     expect((await extension.state(unbound.id)).activeRuleId).toBeNull();
+});
+
+test('SSE and WebSocket handshakes use the active tab lane', async ({ extension, echo }) => {
+    const target = await openTab(extension, echo);
+    const rule = makeRule('实时接口', 'LIVE', 'realtime-lane');
+    await save(extension, target.id, rule);
+    await apply(extension, target.id, rule.id);
+    await target.page.evaluate(() => Promise.all([
+        new Promise<void>((resolve, reject) => {
+            const events = new EventSource('/events');
+            events.onmessage = () => { events.close(); resolve(); };
+            events.onerror = () => { events.close(); reject(new Error('SSE connection failed')); };
+        }),
+        new Promise<void>((resolve, reject) => {
+            const socket = new WebSocket(`ws://${location.host}/socket`);
+            socket.onopen = () => { socket.close(); resolve(); };
+            socket.onerror = () => reject(new Error('WebSocket handshake failed'));
+        }),
+    ]));
+    for (const path of ['/events', '/socket']) {
+        expect(echo.requests.some((request) => request.path === path && request.headers['x-lane'] === 'realtime-lane'), `${path} missing x-lane`).toBe(true);
+    }
+});
+
+test('secure WebSocket handshakes use the active tab lane', async ({ extension, echo }) => {
+    const certificateDirectory = await mkdtemp(join(tmpdir(), 'lane-wss-cert-'));
+    const keyPath = join(certificateDirectory, 'key.pem');
+    const certPath = join(certificateDirectory, 'cert.pem');
+    let server: ReturnType<typeof createHttpsServer> | undefined;
+    const upgradedSockets = new Set<Duplex>();
+    try {
+        await promisify(execFile)('openssl', [
+            'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+            '-subj', '/CN=localhost', '-keyout', keyPath, '-out', certPath,
+        ]);
+        server = createHttpsServer({ key: await readFile(keyPath), cert: await readFile(certPath) });
+        let handshakeLane: string | undefined;
+        server.on('upgrade', (request, socket) => {
+            upgradedSockets.add(socket);
+            socket.on('close', () => upgradedSockets.delete(socket));
+            handshakeLane = request.headers['x-lane'] as string | undefined;
+            const key = request.headers['sec-websocket-key'];
+            if (!key || Array.isArray(key)) { socket.destroy(); return; }
+            const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+            socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+            setTimeout(() => socket.destroy(), 100);
+        });
+        await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+        const address = server.address();
+        if (!address || typeof address === 'string') throw new Error('WSS server did not receive a port.');
+
+        const target = await openTab(extension, echo);
+        const rule = makeRule('安全实时接口', 'WSS', 'secure-realtime-lane');
+        await save(extension, target.id, rule);
+        await apply(extension, target.id, rule.id);
+        await target.page.evaluate((port) => new Promise<void>((resolve, reject) => {
+            const socket = new WebSocket(`wss://127.0.0.1:${port}/secure-socket`);
+            socket.onopen = () => { socket.close(); resolve(); };
+            socket.onerror = () => reject(new Error('Secure WebSocket handshake failed'));
+        }), address.port);
+        expect(handshakeLane).toBe('secure-realtime-lane');
+    } finally {
+        for (const socket of upgradedSockets) socket.destroy();
+        server?.closeAllConnections();
+        if (server?.listening) await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
+        await rm(certificateDirectory, { recursive: true, force: true });
+    }
 });
 
 test('switching or disabling a tab does not affect another tab and restores its title', async ({ extension, echo }) => {
@@ -470,7 +558,12 @@ test('the sketch popup can create, edit, enable, and delete rules without leavin
         await expect(popup.getByRole('switch', { name: `启用「${name}」` })).not.toBeChecked();
     }
     const documentRule = popup.getByRole('listitem').filter({ has: popup.getByRole('switch', { name: '停用「文档联调」' }) });
-    await documentRule.getByRole('button', { name: '编辑', exact: true }).click();
+    await documentRule.locator('.rule-name').click();
+    await expect(popup.locator('#popup')).toHaveClass(/switching-editor/);
+    await expect.poll(() => popup.locator('#editor').evaluate((element) => element.getAnimations().length)).toBe(1);
+    await expect(documentRule).toHaveClass(/selected/);
+    await expect(popup.locator('#popup')).not.toHaveClass(/switching-editor/);
+    await expect(popup.getByRole('heading', { name: '编辑「文档联调」' })).toBeVisible();
     await expect(popup.getByLabel('请求头内容 1', { exact: true })).toHaveValue('doc-20260910');
     await expect(popup.locator('#popup')).toHaveAttribute('aria-busy', 'false');
     for (const name of ['文档联调', '主体修复', '图视频轮询 oncall']) {
@@ -568,6 +661,8 @@ test('rule directory starts newest-first and supports persisted drag and keyboar
     // Reordering the directory must not discard an unsaved editor draft or change the active lane.
     await popup.getByRole('listitem').filter({ has: popup.getByRole('button', { name: `删除「${third.name}」` }) })
         .getByRole('button', { name: '编辑', exact: true }).click();
+    await expect(popup.locator('#popup')).not.toHaveClass(/switching-editor/);
+    await expect(popup.getByRole('heading', { name: `编辑「${third.name}」` })).toBeVisible();
     await popup.getByLabel('规则名称', { exact: true }).fill('未保存的草稿');
     const secondHandle = popup.getByRole('button', { name: `拖动排序「${second.name}」` });
     await secondHandle.dragTo(popup.locator('.rule').first(), { targetPosition: { x: 10, y: 5 } });

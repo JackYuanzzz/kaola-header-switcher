@@ -38,6 +38,7 @@ let formError: HTMLElement | null = null;
 let draftStatus: HTMLElement | null = null;
 let emojiBaseline = tabEmojiInput.value;
 let draggingRuleId: string | null = null;
+let switchingEditor = false;
 
 function dirty(): boolean {
     return draft !== null && JSON.stringify(draft) !== baseline;
@@ -146,12 +147,14 @@ function renderRules(): void {
     for (const rule of state.rules) {
         const active = state.activeRuleId === rule.id;
         const selected = draft?.id === rule.id;
-        const item = node('li', `rule${active ? ' active' : ''}`);
-        item.dataset.sketch = 'rule';
-        item.dataset.ruleId = rule.id;
-        const top = node('div', 'rule-top');
         const nameText = displayRuleName(rule);
         const codeText = displayRuleShortName(rule);
+        const item = node('li', `rule${active ? ' active' : ''}${selected ? ' selected' : ''}`);
+        item.dataset.sketch = 'rule';
+        item.dataset.ruleId = rule.id;
+        item.tabIndex = 0;
+        item.setAttribute('aria-label', `编辑「${nameText}」`);
+        const top = node('div', 'rule-top');
         const name = node('span', 'rule-name', nameText);
         name.title = nameText;
         const toggle = button('', 'switch', () => { void applyRule(active ? null : rule.id); }, !state.tab.supported && !active);
@@ -165,7 +168,7 @@ function renderRules(): void {
         const used = active ? '当前标签页使用中' : otherCount ? `另 ${otherCount} 个标签页使用中` : '未启用';
         const actions = node('div', 'rule-actions');
         actions.append(button(selected ? '正在编辑' : '编辑', `text-btn${selected ? '' : ' secondary'}`, () => {
-            if (!selected) protectDraft(() => selectRule(rule.id));
+            if (!selected) protectDraft(() => { void switchEditor(rule.id); });
         }));
         const remove = button('删除', 'text-btn danger', () => requestDeleteRule(rule.id));
         remove.setAttribute('aria-label', `删除「${nameText}」`);
@@ -210,6 +213,23 @@ function renderRules(): void {
             const ids = state.rules.map(entry => entry.id).filter(id => id !== draggedId);
             ids.splice(ids.indexOf(rule.id) + Number(after), 0, draggedId);
             void reorderRules(ids);
+        });
+        const openEditor = () => {
+            if (busy) return;
+            if (selected) {
+                editor.querySelector<HTMLInputElement>('[name="ruleName"]')?.focus();
+            } else {
+                protectDraft(() => { void switchEditor(rule.id); });
+            }
+        };
+        item.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element) || event.target.closest('button')) return;
+            openEditor();
+        });
+        item.addEventListener('keydown', (event) => {
+            if (event.target !== item || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            openEditor();
         });
         item.append(top, node('p', 'rule-meta', `${rule.headers.length} 个请求头 · ${used}`), actions);
         ruleList.append(item);
@@ -300,6 +320,47 @@ function selectRule(id: string | null): void {
     clearConfirmation();
     renderRules();
     renderEditor();
+}
+
+function ruleCard(id: string): HTMLElement | undefined {
+    return [...ruleList.querySelectorAll<HTMLElement>('.rule')].find((item) => item.dataset.ruleId === id);
+}
+
+async function animateEditor(card: DOMRect, entering: boolean): Promise<void> {
+    const bounds = editor.getBoundingClientRect();
+    const small = {
+        transform: `translate(${card.left - bounds.left}px, ${card.top - bounds.top}px) scale(${card.width / bounds.width}, ${card.height / bounds.height})`,
+        opacity: 0.35,
+    };
+    const full = { transform: 'translate(0, 0) scale(1)', opacity: 1 };
+    const animation = editor.animate(entering ? [small, full] : [full, small], {
+        duration: 220,
+        easing: entering ? 'cubic-bezier(0.2, 0.7, 0.2, 1)' : 'cubic-bezier(0.4, 0, 0.8, 0.4)',
+        fill: 'both',
+    });
+    try { await animation.finished; } finally { animation.cancel(); }
+}
+
+async function switchEditor(id: string): Promise<void> {
+    if (switchingEditor || !state?.rules.some((rule) => rule.id === id)) return;
+    const from = draft && ruleCard(draft.id)?.getBoundingClientRect();
+    const to = ruleCard(id)?.getBoundingClientRect();
+    if (!from || !to || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        selectRule(id);
+        editor.querySelector<HTMLInputElement>('[name="ruleName"]')?.focus();
+        return;
+    }
+    switchingEditor = true;
+    popup.classList.add('switching-editor');
+    try {
+        await animateEditor(from, false);
+        selectRule(id);
+        await animateEditor(to, true);
+    } finally {
+        popup.classList.remove('switching-editor');
+        switchingEditor = false;
+    }
+    editor.querySelector<HTMLInputElement>('[name="ruleName"]')?.focus({ preventScroll: true });
 }
 
 function startNewRule(): void {
