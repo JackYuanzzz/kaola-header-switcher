@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "有问题找kaola",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "为每个标签页独立配置请求头，使用手绘面板管理规则，以考拉标记和规则简称辨认当前环境。",
   "minimum_chrome_version": "110",
   "permissions": [
