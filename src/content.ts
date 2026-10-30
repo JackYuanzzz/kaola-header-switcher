@@ -1,14 +1,15 @@
 import { DEFAULT_TAB_EMOJI, validateEmoji } from './rules.js';
 
-// Bundled as an IIFE. The DOM marker survives extension reloads, unlike its isolated world.
+// Bundled as an IIFE. Session storage survives extension reloads without changing SSR markup.
 interface LaneTitleController { update(shortName: string | null, emoji: string): void; dispose(): void }
 interface TitleMarker { owner: string; base: string; rendered: string }
 const context = window as Window & { __laneHeaderSwitcherTitle?: LaneTitleController };
-const markerAttribute = 'data-lane-header-switcher-title';
+const markerKey = '__lane_header_switcher_title__';
+const legacyMarkerAttribute = 'data-lane-header-switcher-title';
 
-function readMarker(): TitleMarker | null {
+function parseMarker(raw: string | null): TitleMarker | null {
     try {
-        const value: unknown = JSON.parse(document.documentElement?.getAttribute(markerAttribute) || 'null');
+        const value: unknown = JSON.parse(raw || 'null');
         if (!value || typeof value !== 'object') return null;
         const marker = value as Record<string, unknown>;
         return typeof marker.owner === 'string' && typeof marker.base === 'string' && typeof marker.rendered === 'string'
@@ -16,11 +17,19 @@ function readMarker(): TitleMarker | null {
     } catch { return null; }
 }
 
+function readMarker(): TitleMarker | null {
+    try { return parseMarker(sessionStorage.getItem(markerKey)); }
+    catch { return null; }
+}
+
 // Retire any previous instance when Chrome reinjects into an already-open document.
 context.__laneHeaderSwitcherTitle?.dispose();
-const stale = readMarker();
+// Older versions stored the marker on <html>; remove it before React hydrates.
+const legacy = parseMarker(document.documentElement?.getAttribute(legacyMarkerAttribute) ?? null);
+const stale = readMarker() ?? legacy;
 if (stale && document.title === stale.rendered) document.title = stale.base;
-document.documentElement?.removeAttribute(markerAttribute);
+document.documentElement?.removeAttribute(legacyMarkerAttribute);
+try { sessionStorage.removeItem(markerKey); } catch { /* Storage can be unavailable. */ }
 
 {
     const owner = crypto.randomUUID();
@@ -33,16 +42,17 @@ document.documentElement?.removeAttribute(markerAttribute);
         try { return Boolean(chrome.runtime?.id); } catch { return false; }
     };
     const remember = () => {
-        document.documentElement?.setAttribute(markerAttribute, JSON.stringify({ owner, base: baseTitle, rendered: renderedTitle }));
+        try { sessionStorage.setItem(markerKey, JSON.stringify({ owner, base: baseTitle, rendered: renderedTitle })); }
+        catch { /* Keep the title indicator working when storage is unavailable. */ }
     };
     const restore = () => {
         observer.disconnect();
         clearInterval(invalidationTimer);
         invalidationTimer = undefined;
         const marker = readMarker();
-        if (marker?.owner === owner) {
+        if (marker?.owner === owner || !marker) {
             if (document.title === renderedTitle) document.title = baseTitle;
-            document.documentElement?.removeAttribute(markerAttribute);
+            try { sessionStorage.removeItem(markerKey); } catch { /* Storage can be unavailable. */ }
         }
         prefix = '';
         renderedTitle = document.title;

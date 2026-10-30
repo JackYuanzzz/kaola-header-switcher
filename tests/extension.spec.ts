@@ -222,6 +222,7 @@ test('switching or disabling a tab does not affect another tab and restores its 
     await apply(extension, beta.id, first.id);
 
     await expect(alpha.page).toHaveTitle('🐨[DOC] Lane test');
+    await expect(alpha.page.locator('html')).not.toHaveAttribute('data-lane-header-switcher-title');
     await expect.poll(() => extension.worker.evaluate(async (tabId) => chrome.action.getBadgeText({ tabId }), alpha.id)).toBe('DOC');
     await alpha.page.evaluate(() => { document.title = 'SPA changed title'; });
     await expect(alpha.page).toHaveTitle('🐨[DOC] SPA changed title');
